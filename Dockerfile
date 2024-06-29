@@ -1,6 +1,8 @@
 # Started from Alpine
 FROM alpine:latest
 
+EXPOSE 8080
+
 # Install necessary packages
 RUN apk update && apk add --no-cache docker go
 
