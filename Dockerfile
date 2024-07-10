@@ -1,4 +1,7 @@
-FROM golang:1.22.3
+FROM docker:dind
+
+RUN apk update && apk add --no-cache go bash
+
 
 WORKDIR /autograder-server
 
@@ -6,9 +9,3 @@ COPY  . .
 
 RUN ./scripts/build.sh 
 
-# whats a better chmod code
-RUN chmod 777 run_in_Docker.sh
-
-# I tried CMD ENTRYPOINT worked better for me
-# I probaly missed something with CMD 
-ENTRYPOINT ["./run_in_Docker.sh"] 
