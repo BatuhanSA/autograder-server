@@ -2,4 +2,4 @@
 executable=$1 
 cd bin/
 shift 1
-./$executable $@
+./$executable "$@"
