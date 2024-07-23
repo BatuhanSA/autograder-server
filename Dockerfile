@@ -5,9 +5,11 @@ FROM golang:1.23rc1-alpine3.20
 
 RUN apk update && apk add --no-cache bash go openjdk8 g++ python3-dev py3-pip git libffi-dev
 
-RUN setup.sh
 
 WORKDIR /autograder-server
+
+COPY setup.sh .
+RUN bash setup.sh
 
 COPY cmd/ cmd/
 COPY internal/ internal/
@@ -15,7 +17,6 @@ COPY scripts/ scripts/
 COPY testdata/ testdata/
 COPY go.* .
 COPY LICENSE .
-COPY ../Scripts/dev-tools-Docker/setup.sh .
 # Added for tracking changes that I do ONLY FOR DEV/TESTING
 COPY .git/ .git/
 COPY .gitignore .
@@ -28,9 +29,6 @@ COPY test.sh test.sh
 
 RUN ./scripts/build.sh 
 
-
-
-CMD ["bash","setup.sh"]
 # # whats a better chmod code
 # RUN chmod 777 run_in_Docker.sh
 
