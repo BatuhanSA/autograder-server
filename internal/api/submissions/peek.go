@@ -1,4 +1,4 @@
-package submission
+package submissions
 
 import (
 	"github.com/edulinq/autograder/internal/api/core"
@@ -10,8 +10,8 @@ type PeekRequest struct {
 	core.APIRequestAssignmentContext
 	core.MinCourseRoleStudent
 
-	TargetUser       core.TargetUserSelfOrGrader `json:"target-email"`
-	TargetSubmission string                      `json:"target-submission"`
+	TargetUser       core.TargetCourseUserSelfOrGrader `json:"target-email"`
+	TargetSubmission string                            `json:"target-submission"`
 }
 
 type PeekResponse struct {
