@@ -3,7 +3,7 @@
 
 FROM golang:1.23rc1-alpine3.20
 
-RUN apk update && apk add --no-cache bash go openjdk8 g++ python3-dev py3-pip git libffi-dev
+RUN apk update && apk add --no-cache bash go docker-cli openjdk8 g++ python3-dev py3-pip git libffi-dev
 
 
 WORKDIR /autograder-server
