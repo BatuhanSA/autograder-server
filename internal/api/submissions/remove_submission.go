@@ -1,4 +1,4 @@
-package submission
+package submissions
 
 import (
 	"github.com/edulinq/autograder/internal/api/core"
@@ -9,8 +9,8 @@ type RemoveSubmissionRequest struct {
 	core.APIRequestAssignmentContext
 	core.MinCourseRoleGrader
 
-	TargetUser       core.TargetUserSelfOrGrader `json:"target-email"`
-	TargetSubmission string                      `json:"target-submission"`
+	TargetUser       core.TargetCourseUserSelfOrGrader `json:"target-email"`
+	TargetSubmission string                            `json:"target-submission"`
 }
 
 type RemoveSubmissionResponse struct {

@@ -9,13 +9,13 @@ type UserGetRequest struct {
 	core.APIRequestCourseUserContext
 	core.MinCourseRoleGrader
 
-	TargetUser core.TargetUser `json:"target-email"`
+	TargetUser core.TargetCourseUser `json:"target-email"`
 }
 
 type UserGetResponse struct {
-	FoundAGUser  bool           `json:"found-autograder-user"`
-	FoundLMSUser bool           `json:"found-lms-user"`
-	User         *core.UserInfo `json:"user"`
+	FoundAGUser  bool                 `json:"found-autograder-user"`
+	FoundLMSUser bool                 `json:"found-lms-user"`
+	User         *core.CourseUserInfo `json:"user"`
 }
 
 func HandleUserGet(request *UserGetRequest) (*UserGetResponse, *core.APIError) {
@@ -31,7 +31,7 @@ func HandleUserGet(request *UserGetRequest) (*UserGetResponse, *core.APIError) {
 	}
 
 	response.FoundAGUser = true
-	response.User = core.NewUserInfo(request.TargetUser.User)
+	response.User = core.NewCourseUserInfo(request.TargetUser.User)
 
 	lmsUser, err := lms.FetchUser(request.Course, string(request.TargetUser.Email))
 	if err != nil {

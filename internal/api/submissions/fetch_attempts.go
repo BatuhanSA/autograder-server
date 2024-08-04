@@ -1,4 +1,4 @@
-package submission
+package submissions
 
 import (
 	"github.com/edulinq/autograder/internal/api/core"
@@ -10,7 +10,7 @@ type FetchAttemptsRequest struct {
 	core.APIRequestAssignmentContext
 	core.MinCourseRoleGrader
 
-	TargetUser core.TargetUserSelfOrGrader `json:"target-email"`
+	TargetUser core.TargetCourseUserSelfOrGrader `json:"target-email"`
 }
 
 type FetchAttemptsResponse struct {
