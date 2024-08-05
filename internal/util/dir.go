@@ -1,9 +1,10 @@
 package util
 
 import (
-	"errors"
+	// "errors"
 	"os"
 	"sync"
+	"fmt"
 )
 
 const DEFAULT_MKDIR_PERMS os.FileMode = 0755
@@ -21,6 +22,7 @@ func MkDirTemp(prefix string) (string, error) {
 	defer tempDirMutex.Unlock()
 
 	dir, err := os.MkdirTemp(tempDir, prefix)
+	fmt.Println("Dir = ",dir)
 	if err != nil {
 		return "", err
 	}
@@ -43,15 +45,16 @@ func ClearRecordedTempDirs() {
 
 // Remove all the temp dirs created via MkDirTemp().
 func RemoveRecordedTempDirs() error {
-	tempDirMutex.Lock()
-	defer tempDirMutex.Unlock()
+	// tempDirMutex.Lock()
+	// defer tempDirMutex.Unlock()
 
-	var errs error = nil
-	for _, dir := range createdTempDirs {
-		errs = errors.Join(errs, RemoveDirent(dir))
-	}
+	// var errs error = nil
+	// for _, dir := range createdTempDirs {
+	// 	errs = errors.Join(errs, RemoveDirent(dir))
+	// }
 
-	ClearRecordedTempDirs()
+	// ClearRecordedTempDirs()
 
-	return errs
+	// return errs
+	return nil 
 }

@@ -3,7 +3,7 @@ package grader
 import (
 	"bytes"
 	"fmt"
-	"os"
+	//"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -31,7 +31,7 @@ func runNoDockerGrader(assignment *model.Assignment, submissionPath string, opti
 	}
 
 	if !options.LeaveTempDir {
-		defer os.RemoveAll(tempDir)
+		// defer os.RemoveAll(tempDir)
 	} else {
 		log.Info("Leaving behind temp grading dir.", log.NewAttr("path", tempDir))
 	}

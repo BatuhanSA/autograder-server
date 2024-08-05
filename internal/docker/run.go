@@ -15,6 +15,7 @@ import (
 )
 
 func RunContainer(logId log.Loggable, imageName string, inputDir string, outputDir string, gradingID string) (string, string, error) {
+	fmt.Println("imageName = ",imageName)
 	ctx, docker, err := getDockerClient()
 	if err != nil {
 		return "", "", err

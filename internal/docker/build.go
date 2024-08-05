@@ -48,7 +48,7 @@ func BuildImageWithOptions(imageSource ImageSource, options *BuildOptions) error
 	if config.DEBUG.Get() {
 		log.Info("Leaving behind temp building dir.", imageSource, log.NewAttr("path", tempDir))
 	} else {
-		defer os.RemoveAll(tempDir)
+		// defer os.RemoveAll(tempDir)
 	}
 
 	err = writeDockerContext(imageInfo, tempDir)

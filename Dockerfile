@@ -23,11 +23,11 @@ COPY .gitignore .
 # This is going to be ultimalty the file that we run in docker
 # COPY run_in_Docker .
 COPY VERSION.txt .
-COPY test.sh test.sh
+# COPY test.sh test.sh
 
 #RUN ls -la
 
-RUN ./scripts/build.sh 
+# RUN ./scripts/build.sh 
 
 # # whats a better chmod code
 # RUN chmod 777 run_in_Docker.sh
