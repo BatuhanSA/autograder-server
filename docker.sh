@@ -3,9 +3,11 @@
 
 ./clean.sh
 
+mkdir /tmp/autograder-temp
+
 docker build . -t test
 
-docker run -it --name DooD-Testing  -v /var/run/docker.sock:/var/run/docker.sock test bash
+docker run -it --name DooD-Testing  -v /var/run/docker.sock:/var/run/docker.sock -v /tmp/autograder-temp:/tmp/autograder-temp test bash
 
 
 # docker wait DooD-Testing

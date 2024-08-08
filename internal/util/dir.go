@@ -9,7 +9,7 @@ import (
 
 const DEFAULT_MKDIR_PERMS os.FileMode = 0755
 
-var tempDir string = ""
+var tempDir string = "/tmp/autograder-temp"
 var tempDirMutex sync.Mutex
 var createdTempDirs []string
 

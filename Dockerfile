@@ -23,7 +23,7 @@ COPY .gitignore .
 # This is going to be ultimalty the file that we run in docker
 # COPY run_in_Docker .
 COPY VERSION.txt .
-# COPY test.sh test.sh
+
 
 #RUN ls -la
 
