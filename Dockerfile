@@ -18,20 +18,17 @@ COPY testdata/ testdata/
 COPY go.* .
 COPY LICENSE .
 COPY VERSION.txt .
-# This is going to be ultimalty the file that we run in docker
 COPY parent_entrypoint.sh .
 
 
-# Added for tracking changes that I do ONLY FOR DEV/TESTING
+# Added for tracking changes that I do in containers 
+# ONLY FOR DEV/TESTING
+
 COPY .git/ .git/
 COPY .gitignore .
 
-# RUN ./scripts/build.sh 
+RUN ./scripts/build.sh 
 
-# # whats a better chmod code
-RUN chmod 0775 parent_entrypoint.sh
+# RUN chmod 0775 parent_entrypoint.sh
 
-# # I tried CMD ENTRYPOINT worked better for me
-# # I probaly missed something with CMD 
-
-# ENTRYPOINT ["./run_in_Docker.sh"] 
+# ENTRYPOINT ["./parent_entrypoint.sh"] 
