@@ -23,12 +23,13 @@ COPY parent_entrypoint.sh .
 
 # Added for tracking changes that I do in containers 
 # ONLY FOR DEV/TESTING
-
+##################################################
 COPY .git/ .git/
 COPY .gitignore .
+##################################################
 
-RUN ./scripts/build.sh 
+# RUN ./scripts/build.sh 
 
-# RUN chmod 0775 parent_entrypoint.sh
+RUN chmod 0775 parent_entrypoint.sh
 
-# ENTRYPOINT ["./parent_entrypoint.sh"] 
+ENTRYPOINT ["./parent_entrypoint.sh"] 
