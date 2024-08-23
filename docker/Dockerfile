@@ -17,6 +17,7 @@ COPY ./docker/entrypoint.sh .
 RUN chmod 0775 entrypoint.sh
 
 RUN ./scripts/build.sh
+RUN ./scripts/run_tests.sh
 RUN rm -rf ./bin
 
 ENTRYPOINT ["./entrypoint.sh"]
