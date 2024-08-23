@@ -61,5 +61,5 @@ jobs:
       #   run: ./.ci/verify_py_test_data.sh
 
       - name: Build the Autograder Image 
-        run: docker ps 
+        run: docker build -f ./docker/Dockerfile -t autograder .
 
