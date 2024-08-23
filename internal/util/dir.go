@@ -3,12 +3,13 @@ package util
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"sync"
 )
 
 const DEFAULT_MKDIR_PERMS os.FileMode = 0755
 
-var tempDir string = "/tmp/autograder-temp"
+var tempDir string = filepath.Join("/", "tmp", "autograder-temp")
 var tempDirMutex sync.Mutex
 var createdTempDirs []string
 
@@ -19,6 +20,10 @@ func SetTempDirForTesting(newTempDir string) {
 func MkDirTemp(prefix string) (string, error) {
 	tempDirMutex.Lock()
 	defer tempDirMutex.Unlock()
+
+	if tempDir != "" {
+		MkDir(tempDir)
+	}
 
 	dir, err := os.MkdirTemp(tempDir, prefix)
 	if err != nil {

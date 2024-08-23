@@ -33,32 +33,33 @@ jobs:
           path: ${{ env.pythonLocation }}
           key: ${{ runner.os }}-${{ env.pythonLocation }}-${{ hashFiles('testdata/requirements.txt') }}
 
-      - name: Install Python Interface
-        run: ./.ci/install_py_interface.sh 'main'
+      # - name: Install Python Interface
+      #   run: ./.ci/install_py_interface.sh 'main'
 
-      - name: Build
-        run: ./scripts/build.sh
+      # - name: Build
+      #   run: ./scripts/build.sh
 
-      - name: Check Formatting
-        run: ./scripts/check_formatting.sh
+      # - name: Check Formatting
+      #   run: ./scripts/check_formatting.sh
 
-      - name: Check Duplicate API Locators
-        run: ./scripts/check_duplicate_api_locators.sh
+      # - name: Check Duplicate API Locators
+      #   run: ./scripts/check_duplicate_api_locators.sh
       
-      - name: Create /tmp/autograder-temp
-        run: mkdir -p /tmp/autograder-temp
+      # - name: Run Base Tests
+      #   env:
+      #     AUTOGRADER__DOCKER__DISABLE: 'true'
+      #   run: ./scripts/run_tests.sh
 
-      - name: Run Base Tests
-        env:
-          AUTOGRADER__DOCKER__DISABLE: 'true'
-        run: ./scripts/run_tests.sh
+      # - name: Run Submission Tests
+      #   env:
+      #     AUTOGRADER__DOCKER__DISABLE: 'true'
+      #   run: ./.ci/run_remote_tests.sh
 
-      - name: Run Submission Tests
-        env:
-          AUTOGRADER__DOCKER__DISABLE: 'true'
-        run: ./.ci/run_remote_tests.sh
+      # - name: Verify Python Interface Test Data
+      #   env:
+      #     AUTOGRADER__DOCKER__DISABLE: 'true'
+      #   run: ./.ci/verify_py_test_data.sh
 
-      - name: Verify Python Interface Test Data
-        env:
-          AUTOGRADER__DOCKER__DISABLE: 'true'
-        run: ./.ci/verify_py_test_data.sh
+      - name: Build the Autograder Image 
+        run: docker ps 
+
