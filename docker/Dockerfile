@@ -1,9 +1,14 @@
 FROM golang:1.22.6-alpine3.20
 
 RUN apk update
-RUN apk add --no-cache bash go
+RUN apk add --no-cache bash go git
 
 WORKDIR /autograder-server
+
+COPY ./.git/HEAD  .git/
+COPY ./.git/refs  .git/refs/ 
+COPY ./.git/index .git/
+COPY ./.git/objects .git/objects/
 
 COPY ./cmd/ cmd/
 COPY ./internal/ internal/
