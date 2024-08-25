@@ -60,6 +60,8 @@ jobs:
       #     AUTOGRADER__DOCKER__DISABLE: 'true'
       #   run: ./.ci/verify_py_test_data.sh
 
-      - name: Build the Autograder Image 
+      - name: Build the Autograder Image
+        env:
+          AUTOGRADER__DOCKER__DISABLE: 'true'
         run: docker build -f ./docker/Dockerfile -t autograder .
 
