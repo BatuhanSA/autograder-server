@@ -35,9 +35,14 @@ func MustEnableUnitTestingMode() {
 	if err != nil {
 		log.Fatal("Failed to enable unit testing mode.", err)
 	}
+	
 }
 
 func EnableUnitTestingMode() error {
+	return EnableUnitTestingModeFull(true)
+}
+
+func EnableUnitTestingModeFull(loadEnv bool) error {
 	TESTING_MODE.Set(true)
 	NO_TASKS.Set(true)
 	LOAD_TEST_DATA.Set(true)
@@ -59,6 +64,11 @@ func EnableUnitTestingMode() error {
 		return fmt.Errorf("Failed to copy test data into working dir: '%w'.", err)
 	}
 
+	if loadEnv {
+		// Load environmental variables.
+		LoadEnv()
+	}
+	
 	return nil
 }
 
