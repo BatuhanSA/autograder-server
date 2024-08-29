@@ -1,17 +1,19 @@
 FROM golang:1.22.6-alpine3.20
 
 RUN apk update
-RUN apk add --no-cache bash git python3 
+RUN apk add --no-cache bash git
 
 WORKDIR /autograder-server
 
-RUN python3 -m venv env
-RUN source env/bin/activate && pip3 install autograder-py
-
+# TODO(Batu): Rework on the way that we do version.
 COPY ./.git/HEAD  .git/
 COPY ./.git/refs  .git/refs/ 
 COPY ./.git/index .git/
 COPY ./.git/objects .git/objects/
+# TODO(Batu): Need to edit cmd/version/main.go so it looks for a VERSION.json that has info.
+# RUN go run cmd/version/main.go --json > VERSION.json
+# RUN rm -rf ./.git
+# RUN apk del git 
 
 COPY ./cmd/ cmd/
 COPY ./internal/ internal/
@@ -24,8 +26,9 @@ COPY ./VERSION.txt .
 COPY ./docker/entrypoint.sh .
 RUN chmod 0775 entrypoint.sh
 
-RUN ./scripts/build.sh && rm -rf ./bin
-RUN source env/bin/activate && AUTOGRADER__DOCKER__DISABLE='true' ./scripts/run_tests.sh
-RUN rm -rf ./env
+RUN ./scripts/build.sh 
+RUN AUTOGRADER__DOCKER__DISABLE='true' ./scripts/run_tests.sh
+
+RUN rm -rf ./bin
 
 ENTRYPOINT ["./entrypoint.sh"]
