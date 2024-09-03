@@ -10,13 +10,14 @@ COPY ./.git/refs  .git/refs/
 COPY ./.git/index .git/
 COPY ./.git/objects .git/objects/
 COPY ./.gitignore .
+
 COPY ./cmd/ cmd/
 COPY ./internal/ internal/
 COPY ./scripts/ scripts/
 COPY ./testdata/ testdata/
 COPY ./go.* .
 COPY ./LICENSE .
-COPY ./VERSION.json .
+COPY ./VERSION.txt .
 
 COPY ./docker/entrypoint.sh .
 RUN chmod 0775 entrypoint.sh
