@@ -21,4 +21,5 @@ _submissions/
 *.gz
 /test.*
 users.json
+/VERSION.jsoN
 /out.*
