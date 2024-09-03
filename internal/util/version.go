@@ -10,10 +10,16 @@ import (
 const (
 	UNKNOWN_VERSION  string = "???"
 	UNKNOWN_HASH     string = "????????"
-	VERSION_FILENAME string = "VERSION.txt"
+	VERSION_FILENAME string = "VERSION.json"
 	DIRTY_SUFFIX     string = "dirty"
 	HASH_LENGTH      int    = 8
 )
+
+type Version struct{
+	Short string `json:"short-version"`
+	Hash string `json:"hash-version"`
+	State string `json:"state-version"`
+}
 
 func GetAutograderVersion() string {
 	versionPath := ShouldAbs(filepath.Join(ShouldGetThisDir(), "..", "..", VERSION_FILENAME))
@@ -22,13 +28,19 @@ func GetAutograderVersion() string {
 		return UNKNOWN_VERSION
 	}
 
-	version, err := ReadFile(versionPath)
+	var version Version
+
+	err := JSONFromFile(versionPath,&version)
 	if err != nil {
-		log.Error("Failed to read the version file.", err, log.NewAttr("path", versionPath))
+		log.Error("Failed to read the version JSON file.", err, log.NewAttr("path", versionPath))
 		return UNKNOWN_VERSION
 	}
 
-	return strings.TrimSpace(version)
+	if version.Short == "" {
+		log.Error("Version file does not have a short version",log.NewAttr("path", versionPath))
+	}
+
+	return strings.TrimSpace(version.Short)
 }
 
 func GetAutograderFullVersion() string {
