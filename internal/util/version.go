@@ -38,6 +38,7 @@ func GetAutograderVersion() string {
 
 	if version.Short == "" {
 		log.Error("Version file does not have a short version",log.NewAttr("path", versionPath))
+		return UNKNOWN_VERSION
 	}
 
 	return strings.TrimSpace(version.Short)
