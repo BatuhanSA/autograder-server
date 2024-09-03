@@ -1,6 +1,7 @@
 package util
 
 import (
+	// "fmt"
 	"path/filepath"
 	"strings"
 
@@ -45,9 +46,31 @@ func GetAutograderVersion() string {
 }
 
 func GetAutograderFullVersion() string {
-	repoPath := ShouldAbs(filepath.Join(ShouldGetThisDir(), "..", ".."))
+	versionPath := ShouldAbs(filepath.Join(ShouldGetThisDir(), "..", "..", VERSION_FILENAME))
+	if !IsFile(versionPath) {
+		log.Error("Version file does not exist.", log.NewAttr("path", versionPath))
+		return UNKNOWN_VERSION
+	}
 
-	version := GetAutograderVersion()
+	var version Version
+
+	err := JSONFromFile(versionPath,&version)
+	if err != nil {
+		log.Error("Failed to read the version JSON file.", err, log.NewAttr("path", versionPath))
+		return UNKNOWN_VERSION
+	}
+
+	var shortVersion = GetAutograderVersion()
+
+	if !(version.Hash == ""){
+		if !(version.State == ""){
+			return shortVersion + "-" + version.Hash + "-" + version.State
+		}
+
+		return shortVersion + "-" + version.Hash + version.State
+	}
+
+	repoPath := ShouldAbs(filepath.Join(ShouldGetThisDir(), "..", ".."))
 
 	hash, err := GitGetCommitHash(repoPath)
 	if err != nil {
@@ -62,9 +85,22 @@ func GetAutograderFullVersion() string {
 		dirtySuffix = "-" + UNKNOWN_VERSION
 	}
 
-	if isDirty {
-		dirtySuffix = "-" + DIRTY_SUFFIX
+	versionFull := Version{
+		Short:    shortVersion,
+		Hash:     hash[0:HASH_LENGTH],
+		State:     "",
 	}
 
-	return version + "-" + hash[0:HASH_LENGTH] + dirtySuffix
+	if isDirty {
+		dirtySuffix = "-" + DIRTY_SUFFIX
+		versionFull.State = DIRTY_SUFFIX
+	}
+
+	err = ToJSONFile(&versionFull,versionPath)
+	if err != nil {
+		log.Error("Failed to write to the JSON file", err, log.NewAttr("path", repoPath))
+
+	}
+
+	return shortVersion + "-" + hash[0:HASH_LENGTH] + dirtySuffix
 }
