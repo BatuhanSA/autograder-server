@@ -84,8 +84,10 @@ func ReadAutograderFullVersionJSON() (version string, hash string, state string)
 		if !(readVersion.State == ""){
 			return shortVersion , readVersion.Hash, readVersion.State
 		}
+
 		return shortVersion , readVersion.Hash, ""
 	}
+	
 	return shortVersion , UNKNOWN_HASH, ""
 }
 
@@ -103,7 +105,6 @@ func WriteAutograderFullVersionJSON(version string, hash string, state string) {
 		log.Error("Failed to write to the JSON file", err, log.NewAttr("path", versionJSONPath))
 
 	}
-
 }
 
 func GetAutograderFullVersion() string {
@@ -114,12 +115,16 @@ func GetAutograderFullVersion() string {
 			WriteAutograderFullVersionJSON(shortVersion,hash,"")
 			return shortVersion + "-" + hash
 		}
+
 		WriteAutograderFullVersionJSON(shortVersion,hash,stateVersion)
 		return shortVersion + "-" + hash + "-" + stateVersion
 	}
+
 	shortVersion, hash, stateVersion := ReadAutograderFullVersionJSON()
+
 	if (stateVersion == ""){
 		return shortVersion + "-" + hash
 	}
+
 	return shortVersion + "-" + hash + "-" + stateVersion
 }
