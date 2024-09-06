@@ -20,12 +20,10 @@ COPY ./VERSION.txt ./
 COPY ./docker/entrypoint.sh ./
 RUN chmod 0775 entrypoint.sh
 
-RUN ./scripts/build.sh 
+RUN cd full-copy && ./scripts/build.sh 
 RUN cd full-copy && AUTOGRADER__DOCKER__DISABLE='true' ./scripts/run_tests.sh
-
 RUN cd full-copy && go run ./cmd/version/main.go --out=VERSION.json && mv VERSION.json ..
 
-RUN rm -rf ./bin
 RUN rm -rf ./full-copy
 RUN apk del git
 
