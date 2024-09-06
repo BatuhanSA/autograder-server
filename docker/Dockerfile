@@ -9,7 +9,6 @@ COPY . ./full-copy
 
 # Creat a full copy to a different directory 
 
-
 COPY ./cmd/ cmd/
 COPY ./internal/ internal/
 COPY ./scripts/ scripts/
@@ -18,28 +17,26 @@ COPY ./go.* .
 COPY ./LICENSE .
 COPY ./VERSION.txt .
 
-# COPY ./docker/entrypoint.sh .
-# RUN chmod 0775 entrypoint.sh
+COPY ./docker/entrypoint.sh .
+RUN chmod 0775 entrypoint.sh
 
-# RUN ./scripts/build.sh 
-# RUN AUTOGRADER__DOCKER__DISABLE='true' ./scripts/run_tests.sh
+RUN ./scripts/build.sh 
+RUN AUTOGRADER__DOCKER__DISABLE='true' ./scripts/run_tests.sh
 
-# RUN cd full-copy && go run ./cmd/version/main.go --out=VERSION.json && mv VERSION.json ..
+RUN cd full-copy && go run ./cmd/version/main.go --out=VERSION.json && mv VERSION.json ..
 
-# RUN rm -rf ./bin
-# RUN rm -rf ./.git
-# RUN rm .gitignore
-# RUN rm -rf ./full-copy
-# RUN apk del git
+RUN rm -rf ./bin
+RUN rm -rf ./full-copy
+RUN apk del git
 
-# FROM scratch AS final-stage
+FROM scratch AS final-stage
 
-# ENV GOLANG_VERSION=1.22.6
-# ENV GOTOOLCHAIN=local
-# ENV GOPATH=/go
-# ENV PATH=$GOPATH/bin:/usr/local/go/bin:$PATH
-# COPY --from=build-stage / /
+ENV GOLANG_VERSION=1.22.6
+ENV GOTOOLCHAIN=local
+ENV GOPATH=/go
+ENV PATH=$GOPATH/bin:/usr/local/go/bin:$PATH
+COPY --from=build-stage / /
 
-# WORKDIR /autograder-server
+WORKDIR /autograder-server
 
-# ENTRYPOINT ["./entrypoint.sh"]
+ENTRYPOINT ["./entrypoint.sh"]
