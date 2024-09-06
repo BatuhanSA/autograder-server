@@ -1,15 +1,14 @@
-FROM golang:1.22.6-alpine3.20
+FROM golang:1.22.6-alpine3.20 AS build-stage
 
 RUN apk update
 RUN apk add --no-cache bash git
 
 WORKDIR /autograder-server
 
-COPY ./.git/HEAD  .git/
-COPY ./.git/refs  .git/refs/ 
-COPY ./.git/index .git/
-COPY ./.git/objects .git/objects/
-COPY ./.gitignore .
+COPY . ./full-copy
+
+# Creat a full copy to a different directory 
+
 
 COPY ./cmd/ cmd/
 COPY ./internal/ internal/
@@ -19,14 +18,28 @@ COPY ./go.* .
 COPY ./LICENSE .
 COPY ./VERSION.txt .
 
-COPY ./docker/entrypoint.sh .
-RUN chmod 0775 entrypoint.sh
+# COPY ./docker/entrypoint.sh .
+# RUN chmod 0775 entrypoint.sh
 
-RUN ./scripts/build.sh 
-RUN AUTOGRADER__DOCKER__DISABLE='true' ./scripts/run_tests.sh
+# RUN ./scripts/build.sh 
+# RUN AUTOGRADER__DOCKER__DISABLE='true' ./scripts/run_tests.sh
 
-RUN rm -rf ./bin
-RUN rm -rf ./.git
-RUN rm .gitignore
+# RUN cd full-copy && go run ./cmd/version/main.go --out=VERSION.json && mv VERSION.json ..
 
-ENTRYPOINT ["./entrypoint.sh"]
+# RUN rm -rf ./bin
+# RUN rm -rf ./.git
+# RUN rm .gitignore
+# RUN rm -rf ./full-copy
+# RUN apk del git
+
+# FROM scratch AS final-stage
+
+# ENV GOLANG_VERSION=1.22.6
+# ENV GOTOOLCHAIN=local
+# ENV GOPATH=/go
+# ENV PATH=$GOPATH/bin:/usr/local/go/bin:$PATH
+# COPY --from=build-stage / /
+
+# WORKDIR /autograder-server
+
+# ENTRYPOINT ["./entrypoint.sh"]

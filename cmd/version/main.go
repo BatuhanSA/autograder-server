@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/alecthomas/kong"
 
@@ -13,7 +14,13 @@ import (
 
 var args struct {
 	config.ConfigArgs
+	OUT string `help:"Redirects the output to the given file in JSON format." default:""`
 }
+
+type Version struct{
+	Full string `json:"full-version"`
+}
+
 
 func main() {
 	kong.Parse(&args,
@@ -23,6 +30,22 @@ func main() {
 	err := config.HandleConfigArgs(args.ConfigArgs)
 	if err != nil {
 		log.Fatal("Could not load config options.", err)
+	}
+
+	if !(args.OUT == ""){
+		versionJSONPath := util.ShouldAbs(filepath.Join(util.ShouldGetThisDir(), "..", "..", args.OUT))
+
+		version:= Version{
+			Full:     util.GetAutograderFullVersion(),
+		}
+
+		err := util.ToJSONFile(&version,versionJSONPath)
+		if err != nil {
+			log.Error("Failed to write to the JSON file", err, log.NewAttr("path", versionJSONPath))
+	
+		}
+
+		return 
 	}
 
 	fmt.Println("Autograder")

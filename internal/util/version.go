@@ -17,9 +17,7 @@ const (
 )
 
 type Version struct{
-	Short string `json:"short-version"`
-	Hash string `json:"hash-version"`
-	State string `json:"state-version"`
+	Full string `json:"full-version"`
 }
 
 func GetAutograderVersion() string {
@@ -38,7 +36,7 @@ func GetAutograderVersion() string {
 	return strings.TrimSpace(version)
 }
 
-func ComputeAutograderFullVersion() (string,string,string) {
+func ComputeAutograderFullVersion() string {
 	repoPath := ShouldAbs(filepath.Join(ShouldGetThisDir(), "..", ".."))
 
 	version := GetAutograderVersion()
@@ -53,78 +51,29 @@ func ComputeAutograderFullVersion() (string,string,string) {
 
 	isDirty, err := GitRepoIsDirtyHack(repoPath)
 	if err != nil {
-		dirtySuffix = UNKNOWN_VERSION
+		dirtySuffix = "-" + UNKNOWN_VERSION
 	}
 
 	if isDirty {
-		dirtySuffix = DIRTY_SUFFIX
+		dirtySuffix = "-" + DIRTY_SUFFIX
 	}
 
-	return version, hash[0:HASH_LENGTH] , dirtySuffix
+	return version + "-" + hash[0:HASH_LENGTH] + dirtySuffix
 }
 
-func ReadAutograderFullVersionJSON() (version string, hash string, state string) {
-	versionPath := ShouldAbs(filepath.Join(ShouldGetThisDir(), "..", "..", VERSION_JSON))
-	if !IsFile(versionPath) {
-		log.Error("Version file does not exist.", log.NewAttr("path", versionPath))
-		return UNKNOWN_VERSION, UNKNOWN_HASH, ""
+func GetAutograderFullVersion() string {
+	versionJSONPath := ShouldAbs(filepath.Join(ShouldGetThisDir(), "..", "..", VERSION_JSON))
+	if !PathExists(versionJSONPath) {
+		return ComputeAutograderFullVersion()
 	}
 
 	var readVersion Version
 
-	err := JSONFromFile(versionPath,&readVersion)
+	err := JSONFromFile(versionJSONPath,&readVersion)
 	if err != nil {
-		log.Error("Failed to read the version JSON file.", err, log.NewAttr("path", versionPath))
-		return UNKNOWN_VERSION, UNKNOWN_HASH, ""
+		log.Error("Failed to read the version JSON file.", err, log.NewAttr("path", versionJSONPath))
+		return UNKNOWN_VERSION
 	}
 
-	var shortVersion = GetAutograderVersion()
-
-	if !(readVersion.Hash == ""){
-		if !(readVersion.State == ""){
-			return shortVersion , readVersion.Hash, readVersion.State
-		}
-
-		return shortVersion , readVersion.Hash, ""
-	}
-	
-	return shortVersion , UNKNOWN_HASH, ""
-}
-
-func WriteAutograderFullVersionJSON(version string, hash string, state string) {
-	versionJSONPath := ShouldAbs(filepath.Join(ShouldGetThisDir(), "..", "..", VERSION_JSON))
-
-	versionFull := Version{
-		Short:    version,
-		Hash:     hash[0:HASH_LENGTH],
-		State:     state,
-	}
-
-	err := ToJSONFile(&versionFull,versionJSONPath)
-	if err != nil {
-		log.Error("Failed to write to the JSON file", err, log.NewAttr("path", versionJSONPath))
-
-	}
-}
-
-func GetAutograderFullVersion() string {
-	repoPath := ShouldAbs(filepath.Join(ShouldGetThisDir(), "..", "..",".git"))
-	if PathExists(repoPath){
-		shortVersion, hash, stateVersion := ComputeAutograderFullVersion()
-		if (stateVersion == ""){
-			WriteAutograderFullVersionJSON(shortVersion,hash,"")
-			return shortVersion + "-" + hash
-		}
-
-		WriteAutograderFullVersionJSON(shortVersion,hash,stateVersion)
-		return shortVersion + "-" + hash + "-" + stateVersion
-	}
-
-	shortVersion, hash, stateVersion := ReadAutograderFullVersionJSON()
-
-	if (stateVersion == ""){
-		return shortVersion + "-" + hash
-	}
-
-	return shortVersion + "-" + hash + "-" + stateVersion
+	return readVersion.Full 
 }
