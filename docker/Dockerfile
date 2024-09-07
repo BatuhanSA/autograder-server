@@ -15,7 +15,7 @@ COPY ./scripts/ scripts/
 COPY ./testdata/ testdata/
 COPY ./go.* ./
 COPY ./LICENSE ./
-COPY ./VERSION.txt ./
+COPY ./VERSION.json ./
 
 COPY ./docker/entrypoint.sh ./
 RUN chmod 0775 entrypoint.sh

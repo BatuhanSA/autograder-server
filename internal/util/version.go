@@ -10,13 +10,13 @@ import (
 const (
 	UNKNOWN_VERSION  string = "???"
 	UNKNOWN_HASH     string = "????????"
-	VERSION_FILENAME string = "VERSION.txt"
-	VERSION_JSON     string = "VERSION.json"
+	VERSION_FILENAME string = "VERSION.json"
 	DIRTY_SUFFIX     string = "dirty"
 	HASH_LENGTH      int    = 8
 )
 
 type Version struct{
+	Partial string `json:"partial-version"`
 	Full string `json:"full-version"`
 }
 
@@ -27,13 +27,16 @@ func GetAutograderVersion() string {
 		return UNKNOWN_VERSION
 	}
 
-	version, err := ReadFile(versionPath)
+	var readVersion Version
+	readVersion.Partial = UNKNOWN_HASH
+
+	err := JSONFromFile(versionPath,&readVersion)
 	if err != nil {
-		log.Error("Failed to read the version file.", err, log.NewAttr("path", versionPath))
+		log.Error("Failed to read the version from JSON file.", err, log.NewAttr("path", versionPath))
 		return UNKNOWN_VERSION
 	}
 
-	return strings.TrimSpace(version)
+	return strings.TrimSpace(readVersion.Partial)
 }
 
 func ComputeAutograderFullVersion() string {
@@ -62,18 +65,23 @@ func ComputeAutograderFullVersion() string {
 }
 
 func GetAutograderFullVersion() string {
-	versionJSONPath := ShouldAbs(filepath.Join(ShouldGetThisDir(), "..", "..", VERSION_JSON))
-	if !PathExists(versionJSONPath) {
-		return ComputeAutograderFullVersion()
+	versionPath := ShouldAbs(filepath.Join(ShouldGetThisDir(), "..", "..", VERSION_FILENAME))
+	if !IsFile(versionPath) {
+		log.Error("Version file does not exist.", log.NewAttr("path", versionPath))
+		return UNKNOWN_VERSION
 	}
 
 	var readVersion Version
 
-	err := JSONFromFile(versionJSONPath,&readVersion)
+	err := JSONFromFile(versionPath,&readVersion)
 	if err != nil {
-		log.Error("Failed to read the version JSON file.", err, log.NewAttr("path", versionJSONPath))
+		log.Error("Failed to read the version JSON file.", err, log.NewAttr("path", versionPath))
 		return UNKNOWN_VERSION
 	}
 
-	return readVersion.Full 
+	if readVersion.Full != "" {
+		return readVersion.Full 
+	}
+
+	return ComputeAutograderFullVersion()
 }

@@ -18,6 +18,7 @@ var args struct {
 }
 
 type Version struct{
+	Partial string `json:"partial-version"`
 	Full string `json:"full-version"`
 }
 
@@ -36,6 +37,7 @@ func main() {
 		versionJSONPath := util.ShouldAbs(filepath.Join(util.ShouldGetThisDir(), "..", "..", args.OUT))
 
 		version:= Version{
+			Partial: util.GetAutograderVersion(),
 			Full:     util.GetAutograderFullVersion(),
 		}
 
