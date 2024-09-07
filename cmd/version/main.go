@@ -41,7 +41,7 @@ func main() {
 			Full:     util.GetAutograderFullVersion(),
 		}
 
-		err := util.ToJSONFile(&version,versionJSONPath)
+		err := util.ToJSONFileIndentCustom(&version,versionJSONPath,""," ")
 		if err != nil {
 			log.Error("Failed to write to the JSON file", err, log.NewAttr("path", versionJSONPath))
 	
