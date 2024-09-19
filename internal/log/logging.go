@@ -10,19 +10,16 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
-)
 
-const (
-	PRETTY_TIME_FORMAT = time.RFC3339
+	"github.com/edulinq/autograder/internal/timestamp"
 )
 
 type Record struct {
 	// Core Attributes
-	Level     LogLevel `json:"level"`
-	Message   string   `json:"message"`
-	UnixMicro int64    `json:"unix-time"`
-	Error     string   `json:"error,omitempty"`
+	Level     LogLevel            `json:"level"`
+	Message   string              `json:"message"`
+	Timestamp timestamp.Timestamp `json:"timestamp"`
+	Error     string              `json:"error,omitempty"`
 
 	// Context Attributes
 	Course     string `json:"course,omitempty"`
@@ -66,12 +63,17 @@ func SetBackgroundLogging(value bool) bool {
 	return oldValue
 }
 
-func LogDirectRecord(record *Record) {
-	logText(record)
-	logBackend(record)
+func LogDirectRecord(record *Record, logText bool, logBackend bool) {
+	if logText {
+		logToText(record)
+	}
+
+	if logBackend {
+		logToBackend(record)
+	}
 }
 
-func logBackend(record *Record) {
+func logToBackend(record *Record) {
 	if (backend == nil) || (record == nil) {
 		return
 	}
@@ -89,10 +91,10 @@ func logBackend(record *Record) {
 			errRecord := &Record{
 				Level:     LevelError,
 				Message:   "Failed to log to storage backend.",
-				UnixMicro: time.Now().UnixMicro(),
+				Timestamp: timestamp.Now(),
 				Error:     err.Error(),
 			}
-			logText(errRecord)
+			logToText(errRecord)
 		}
 	}
 
@@ -103,7 +105,7 @@ func logBackend(record *Record) {
 	}
 }
 
-func logText(record *Record) {
+func logToText(record *Record) {
 	if (textWriter == nil) || (record == nil) {
 		return
 	}
@@ -119,6 +121,10 @@ func logText(record *Record) {
 }
 
 func Log(level LogLevel, message string, course string, assignment string, user string, logError error, attributes map[string]any) {
+	LogFull(level, true, true, message, course, assignment, user, logError, attributes)
+}
+
+func LogFull(level LogLevel, logText bool, logBackend bool, message string, course string, assignment string, user string, logError error, attributes map[string]any) {
 	errorMessage := ""
 	if logError != nil {
 		errorMessage = logError.Error()
@@ -127,7 +133,7 @@ func Log(level LogLevel, message string, course string, assignment string, user 
 	record := &Record{
 		Level:     level,
 		Message:   message,
-		UnixMicro: time.Now().UnixMicro(),
+		Timestamp: timestamp.Now(),
 		Error:     errorMessage,
 
 		Course:     course,
@@ -137,7 +143,7 @@ func Log(level LogLevel, message string, course string, assignment string, user 
 		Attributes: attributes,
 	}
 
-	LogDirectRecord(record)
+	LogDirectRecord(record, logText, logBackend)
 }
 
 func LogToLevel(level LogLevel, message string, args ...any) {
@@ -149,11 +155,20 @@ func LogToLevel(level LogLevel, message string, args ...any) {
 	Log(level, message, course, assignment, user, logError, attributes)
 }
 
+func LogToSplitLevels(textLevel LogLevel, backendLevel LogLevel, message string, args ...any) {
+	course, assignment, user, logError, attributes, err := parseArgs(args...)
+	if err != nil {
+		Error("Failed to parse logging arguments.", err)
+	}
+
+	LogFull(textLevel, true, false, message, course, assignment, user, logError, attributes)
+	LogFull(backendLevel, false, true, message, course, assignment, user, logError, attributes)
+}
+
 func (this *Record) String() string {
 	builder := strings.Builder{}
 
-	timestamp := time.UnixMicro(this.UnixMicro).Format(PRETTY_TIME_FORMAT)
-	builder.WriteString(fmt.Sprintf("%s [%5s] %s", timestamp, this.Level.String(), this.Message))
+	builder.WriteString(fmt.Sprintf("%s [%5s] %s", this.Timestamp.SafeString(), this.Level.String(), this.Message))
 
 	attributes := make(map[string]any, len(this.Attributes)+3)
 	for key, value := range this.Attributes {

@@ -9,12 +9,12 @@ package db
 import (
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/edulinq/autograder/internal/config"
 	"github.com/edulinq/autograder/internal/db/disk"
 	"github.com/edulinq/autograder/internal/log"
 	"github.com/edulinq/autograder/internal/model"
+	"github.com/edulinq/autograder/internal/timestamp"
 )
 
 var backend Backend
@@ -80,8 +80,7 @@ type Backend interface {
 
 	// Get a specific server user.
 	// Returns nil if no matching user exists.
-	// If |includeTokens| is false, then the token map should be nil.
-	GetServerUser(email string, includeTokens bool) (*model.ServerUser, error)
+	GetServerUser(email string) (*model.ServerUser, error)
 
 	// Upsert the given users.
 	// Only fields to be updated should be non-nil (excluding email, which will always exist).
@@ -155,11 +154,11 @@ type Backend interface {
 
 	// Record that a task has been completed.
 	// The DB is only required to keep the most recently completed task with the given course/ID.
-	LogTaskCompletion(courseID string, taskID string, instance time.Time) error
+	LogTaskCompletion(courseID string, taskID string, instance timestamp.Timestamp) error
 
 	// Get the last time a task with the given course/ID was completed.
-	// Will return a zero time (time.Time{}).
-	GetLastTaskCompletion(courseID string, taskID string) (time.Time, error)
+	// Will return a zero time (timestamp.Zero()).
+	GetLastTaskCompletion(courseID string, taskID string) (timestamp.Timestamp, error)
 
 	// Logging operations.
 
@@ -168,7 +167,7 @@ type Backend interface {
 
 	// Get any logs that that match the specific requirements.
 	// Each parameter (except for the log level) can be passed with a zero value, in which case it will not be used for filtering.
-	GetLogRecords(level log.LogLevel, after time.Time, courseID string, assignmentID string, userID string) ([]*log.Record, error)
+	GetLogRecords(level log.LogLevel, after timestamp.Timestamp, courseID string, assignmentID string, userID string) ([]*log.Record, error)
 }
 
 func Open() error {
