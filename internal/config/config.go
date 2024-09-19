@@ -69,8 +69,8 @@ func EnableUnitTestingModeFull(loadEnv bool) error {
 	}
 
 	if loadEnv {
-        // Load environmental variables.
-        LoadEnv()
+	// Load environmental variables.
+	LoadEnv()
     }
 
 	return nil
