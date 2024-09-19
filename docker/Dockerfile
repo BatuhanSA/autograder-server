@@ -1,3 +1,4 @@
+# Latest Build Size
 FROM golang:1.22.6-alpine3.20 AS build-stage
 
 RUN apk update
@@ -26,6 +27,37 @@ RUN cd full-copy && go run ./cmd/version/main.go --out=VERSION.json && mv VERSIO
 
 RUN rm -rf ./full-copy
 RUN apk del git
+RUN rm -rf \
+    /usr/local/go/api \
+    /usr/local/go/test \
+    /usr/local/go/pkg/tool/linux_arm64/pack \
+    /usr/local/go/pkg/tool/linux_arm64/buildid \
+    /usr/local/go/pkg/tool/linux_arm64/nm \
+    /usr/local/go/pkg/tool/linux_arm64/addr2line \
+    /usr/local/go/pkg/tool/linux_arm64/covdata \
+    /usr/local/go/pkg/tool/linux_arm64/fix \
+    /usr/local/go/pkg/tool/linux_arm64/doc \
+    /usr/local/go/pkg/tool/linux_arm64/objdump \
+    /usr/local/go/pkg/tool/linux_arm64/cgo \
+    /usr/local/go/pkg/tool/linux_arm64/pprof \
+    /usr/local/go/pkg/tool/linux_arm64/trace \
+    /usr/local/go/src/cmd/pack \
+    /usr/local/go/src/cmd/buildid \
+    /usr/local/go/src/cmd/nm \
+    /usr/local/go/src/cmd/addr2line \ 
+    /usr/local/go/src/cmd/covdata \
+    /usr/local/go/src/cmd/fix \
+    /usr/local/go/src/cmd/doc \
+    /usr/local/go/src/cmd/objdump \ 
+    /usr/local/go/src/cmd/cgo \
+    /usr/local/go/src/cmd/pprof \
+    /usr/local/go/src/cmd/trace
+
+RUN find /go/pkg/ -name 'testdata' | xargs rm -rf
+RUN find /go/pkg/ -name '*_test.go' | xargs rm -rf
+RUN find /go/pkg/mod/cache/download/ -name '*.zip' | xargs rm 
+RUN rm -rf /root/.cache/go-build/
+
 
 FROM scratch AS final-stage
 
