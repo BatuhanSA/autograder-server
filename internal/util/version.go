@@ -16,8 +16,9 @@ const (
 )
 
 type Version struct{
-	Partial string `json:"partial-version"`
-	Full string `json:"full-version"`
+	Short string `json:"short-version"`
+	Hash string `json:"git-hash"`
+	Status string `json:"status"`
 }
 
 func GetAutograderVersion() string {
@@ -28,7 +29,7 @@ func GetAutograderVersion() string {
 	}
 
 	var readVersion Version
-	readVersion.Partial = UNKNOWN_HASH
+	readVersion.Short = UNKNOWN_VERSION
 
 	err := JSONFromFile(versionPath,&readVersion)
 	if err != nil {
@@ -36,13 +37,13 @@ func GetAutograderVersion() string {
 		return UNKNOWN_VERSION
 	}
 
-	return strings.TrimSpace(readVersion.Partial)
+	return strings.TrimSpace(readVersion.Short)
 }
 
-func ComputeAutograderFullVersion() string {
+func ComputeAutograderFullVersion() (version string, gitHash string, gitStatus string) {
 	repoPath := ShouldAbs(filepath.Join(ShouldGetThisDir(), "..", ".."))
 
-	version := GetAutograderVersion()
+	shortVersion := GetAutograderVersion()
 
 	hash, err := GitGetCommitHash(repoPath)
 	if err != nil {
@@ -50,18 +51,21 @@ func ComputeAutograderFullVersion() string {
 		hash = UNKNOWN_HASH
 	}
 
-	dirtySuffix := ""
+	var status string
 
 	isDirty, err := GitRepoIsDirtyHack(repoPath)
 	if err != nil {
-		dirtySuffix = "-" + UNKNOWN_VERSION
+		status = UNKNOWN_VERSION
 	}
 
 	if isDirty {
-		dirtySuffix = "-" + DIRTY_SUFFIX
+		status = DIRTY_SUFFIX
+	}else {
+		status = "clean"
 	}
 
-	return version + "-" + hash[0:HASH_LENGTH] + dirtySuffix
+
+	return shortVersion, hash[0:HASH_LENGTH], status
 }
 
 func GetAutograderFullVersion() string {
@@ -71,6 +75,10 @@ func GetAutograderFullVersion() string {
 		return UNKNOWN_VERSION
 	}
 
+	var shortVersion string 
+	var gitHash string
+	var status string 
+
 	var readVersion Version
 
 	err := JSONFromFile(versionPath,&readVersion)
@@ -79,9 +87,14 @@ func GetAutograderFullVersion() string {
 		return UNKNOWN_VERSION
 	}
 
-	if readVersion.Full != "" {
-		return readVersion.Full 
+	if readVersion.Hash == "" || readVersion.Status == ""{
+		shortVersion , gitHash, status = ComputeAutograderFullVersion()
+		return shortVersion + "-" + gitHash + "-" + status
 	}
 
-	return ComputeAutograderFullVersion()
+	shortVersion = readVersion.Short
+	gitHash = readVersion.Hash
+	status = readVersion.Status
+	
+	return shortVersion + "-" + gitHash + "-" + status
 }

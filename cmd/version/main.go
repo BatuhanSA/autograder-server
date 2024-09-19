@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/alecthomas/kong"
 
@@ -18,8 +19,9 @@ var args struct {
 }
 
 type Version struct{
-	Partial string `json:"partial-version"`
-	Full string `json:"full-version"`
+	Short string `json:"short-version"`
+	Hash string `json:"git-hash"`
+	Status string `json:"status"`
 }
 
 
@@ -36,9 +38,12 @@ func main() {
 	if !(args.OUT == ""){
 		versionJSONPath := util.ShouldAbs(filepath.Join(util.ShouldGetThisDir(), "..", "..", args.OUT))
 
+		versionSplice := strings.Split(util.GetAutograderFullVersion(),"-")
+
 		version:= Version{
-			Partial: util.GetAutograderVersion(),
-			Full:     util.GetAutograderFullVersion(),
+			Short: util.GetAutograderVersion(),
+			Hash : versionSplice[1],
+			Status: versionSplice[2],
 		}
 
 		err := util.ToJSONFileIndentCustom(&version,versionJSONPath,""," ")
