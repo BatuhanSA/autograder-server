@@ -1,8 +1,0 @@
-{
-    "id": "hw0",
-    "name": "Homework 0",
-    "static-files": [
-        "grader.py"
-    ],
-    "image": "edulinq/autograder.python"
-}

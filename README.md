@@ -1,8 +1,8 @@
 # Autograder Server
 
-[![Main](https://github.com/edulinq/autograder-server/actions/workflows/main.yml/badge.svg)](https://github.com/edulinq/autograder-server/actions/workflows/main.yml)
+[![Build Status](https://github.com/edulinq/autograder-server/actions/workflows/main.yml/badge.svg)](https://github.com/edulinq/autograder-server/actions/workflows/main.yml)
 
-A server for automatically (and in real-time) grading programming assignments.
+A server for automatically grading programming assignments in real-time.
 
 The autograding effort is broken into three main parts:
  1. The autograding server that can accept student submissions, run the assignment graders, and provide feedback to students.
@@ -16,15 +16,22 @@ The autograding effort is broken into three main parts:
 
 ## Quick Links
 
- - [Autograder Server](https://github.com/edulinq/autograder-server)
- - [Autograder Python Interface](https://github.com/edulinq/autograder-py)
- - [Autograder Sample Course](https://github.com/edulinq/cse-cracks-course)
+ - [Running the Server](#running-the-server)
+   - [Running the Server in a Docker Container](docs/docker.md#running-the-server)
+ - [Configuration](#configuration)
+ - Resources
+   - [Server (this repo)](https://github.com/edulinq/autograder-server)
+   - [Docker Images](https://hub.docker.com/u/edulinq)
+   - [Python Interface](https://github.com/edulinq/autograder-py)
+   - [Sample Course](https://github.com/edulinq/cse-cracks-course)
 
 ## Installation
 
 This project uses Go 1.21.
-Development and deployment are intended for a Linux environment,
-but all Go code is written in a platform independent fashion.
+Development and deployment of this project rely on POSIX systems (e.g., Linux, macOS, WSL).
+
+All code that is not intended to be exported (used in packages outside of the autograder) is in the `internal` package/directory.
+Since this is a server and not a library, that is the majority of the code.
 
 By default, assignments are graded using Docker.
 Therefore when grading functionality is used,
@@ -33,10 +40,10 @@ Users without Docker can run the server without Docker (see below).
 
 The project adheres to standard Go standards,
 so the `go` tool can be used to build, test, manage, etc.
-Additionally, the `build.sh` script is provided which will build all executables in this project.
+Additionally, the `scripts/build.sh` script is provided which will build all executables in this project into the `bin` directory.
 
 ```
-./build.sh
+./scripts/build.sh
 ```
 
 All executable mains are kept in the `cmd` directory.
@@ -57,7 +64,7 @@ All executables that use autograder resources use the same configuration infrast
 and can therefore be configured the same way and with the same options.
 
 To see all the available options,
-either look in the [config/options.go](config/options.go) file,
+either look in the [config/options.go](internal/config/options.go) file,
 use the `cmd/list-options` executable.
 ```
 ./bin/list-options
@@ -67,6 +74,13 @@ Options can be set on the command-line using the `-c`/`--config` flag.
 For example:
 ```
 ./bin/logs-example --config log.level=debug
+```
+
+Options can also be set using environmental variables by prefixing the option keys
+with `AUTOGRADER__` and replacing any `.` with `__`.
+For example option key `docker.disable` can be set by:
+```
+AUTOGRADER__DOCKER__DISABLE='true' ./scripts/run_tests.sh
 ```
 
 ### Directories
@@ -147,6 +161,10 @@ pip install autograder-py
 ## Running the Server
 
 The main server is available via the `cmd/server` executable.
+```
+./bin/server
+```
+
 The `web.port` config option can be used to set the port the server listens on:
 ```
 ./bin/server -c web.port=80
@@ -154,10 +172,28 @@ The `web.port` config option can be used to set the port the server listens on:
 
 If you want to run on a privileged port as a non-root user,
 we recommend using [setcap](https://man.archlinux.org/man/setcap.8).
-The `setcap.sh` script will do this for you:
+The `scripts/setcap.sh` script will do this for you:
 ```
-./setcap.sh
+./scripts/setcap.sh
 ```
+
+### Running the Server for Testing
+
+You may want to run the server for testing/debugging,
+e.g., if you are developing an interface to the server.
+We recommend two additional changes to how you would normally run the server:
+```
+go run cmd/server/main.go --unit-testing
+```
+
+First, we ran the server using `go run`,
+This will ensure that the server executable is up-to-date before running it.
+Second we used the `--unit-testing` flag,
+which will set some testing options, create a clean new database, and load the test courses (inside the `testdata directory).
+
+Additionally, when running the server in `--unit-testing` mode,
+most configs may get overwritten by the testing infrastructure but environmental variables will not get overwritten.
+For more information about config options see the [Configuration section](#configuration) of this document.
 
 ## Running Tests
 
@@ -170,48 +206,11 @@ and can also be run using the `./.ci/run_all.sh` script:
 
 Users may also choose to run them individually.
 
-### Installing the Python Interface
-
-Some tests require the Python interface to be installed.
-For general users, installing via pip is sufficient:
-```
-pip install autograder-py
-```
-
-For developers who need the latest version, a script in the `./ci` directory can be used to install from source:
-```
-./.ci/install-py-interface.sh
-```
-
 ### Base Tests
 
 The base tests are created with Go's `testing` standard library package,
 and can therefore be run using `go test`.
-The `test.sh` script runs `go test` for each package:
+The `scripts/run_tests.sh` script runs `go test` for each package:
 ```
-./test.sh
-```
-
-### Remote Tests
-
-Remote tests are tests that start an instance of the autograder server,
-sends the server test submissions via the Python interface,
-and ensures that the response matches the expected output.
-
-To find test submissions, the `_tests` directory will be searched for `assignment.json` files.
-Then, an adjacent `test-submissions` directory is looked for.
-
-```
-./.ci/run_remote_tests.sh
-```
-
-### Verifying Python Test Data
-
-As part of the tests for the Python interface,
-the test suite will mock an autograder server using pre-scripted responses.
-To ensure that these responses are correct, this repository can run an official autograder server and
-validate that the pre-scripted responses matches the real responses.
-
-```
-./.ci/verify-py-test-data.sh
+./scripts/run_tests.sh
 ```

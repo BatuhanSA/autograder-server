@@ -1,0 +1,7 @@
+{
+    "id": "course-languages",
+    "name": "Course Using Different Languages.",
+    "lms": {
+        "type": "test"
+    }
+}

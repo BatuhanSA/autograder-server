@@ -16,27 +16,25 @@ function main() {
 
     cd "${ROOT_DIR}"
 
-    ./build.sh
+    echo "Building"
+    ./scripts/build.sh
     if [[ $? -ne 0 ]] ; then
         echo "Failed to build the autograder."
         exit 1
     fi
 
-    ./.ci/install-py-interface.sh
-    if [[ $? -ne 0 ]] ; then
-        echo "Failed to install the Python interface."
-        exit 1
-    fi
-
     local error_count=0
 
-    ./test.sh
+    echo -e "\nChecking Formatting"
+    ./scripts/check_formatting.sh
     ((error_count += $?))
 
-    ./.ci/run_remote_tests.sh
+    echo -e "\nChecking Duplicate API Locators"
+    ./scripts/check_duplicate_api_locators.sh
     ((error_count += $?))
 
-    ./.ci/verify-py-test-data.sh
+    echo -e "\nRunning Tests"
+    ./scripts/run_tests.sh
     ((error_count += $?))
 
     echo "================="
