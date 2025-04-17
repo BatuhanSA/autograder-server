@@ -4,11 +4,15 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/edulinq/autograder/internal/common"
 	"github.com/edulinq/autograder/internal/lms/lmstypes"
+	"github.com/edulinq/autograder/internal/util"
 )
 
 func (this *CanvasBackend) UpdateComments(assignmentID string, comments []*lmstypes.SubmissionComment) error {
+	if assignmentID == "" {
+		return fmt.Errorf("Cannot update comments, target assignment ID is empty.")
+	}
+
 	for i, comment := range comments {
 		if i != 0 {
 			time.Sleep(time.Duration(UPLOAD_SLEEP_TIME_SEC))
@@ -24,6 +28,10 @@ func (this *CanvasBackend) UpdateComments(assignmentID string, comments []*lmsty
 }
 
 func (this *CanvasBackend) UpdateComment(assignmentID string, comment *lmstypes.SubmissionComment) error {
+	if assignmentID == "" {
+		return fmt.Errorf("Cannot update comment, target assignment ID is empty.")
+	}
+
 	this.getAPILock()
 	defer this.releaseAPILock()
 
@@ -36,7 +44,7 @@ func (this *CanvasBackend) UpdateComment(assignmentID string, comment *lmstypes.
 	form["comment"] = comment.Text
 
 	headers := this.standardHeaders()
-	_, _, err := common.PutWithHeaders(url, form, headers)
+	_, _, err := util.PutWithHeaders(url, form, headers)
 
 	if err != nil {
 		return fmt.Errorf("Failed to update comments: '%w'.", err)

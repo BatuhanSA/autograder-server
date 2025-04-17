@@ -30,6 +30,10 @@ func GetAssignment(rawCourseID string, rawAssignmentID string) (*model.Assignmen
 		return nil, err
 	}
 
+	if course == nil {
+		return nil, fmt.Errorf("Unable to find course '%s'.", rawCourseID)
+	}
+
 	assignmentID, err := common.ValidateID(rawAssignmentID)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to validate assignment id '%s': '%w'.", rawAssignmentID, err)
@@ -41,4 +45,24 @@ func GetAssignment(rawCourseID string, rawAssignmentID string) (*model.Assignmen
 	}
 
 	return assignment, nil
+}
+
+func MustSaveAssignment(assignment *model.Assignment) {
+	err := SaveAssignment(assignment)
+	if err != nil {
+		log.Fatal("Failed to save assignment.", err)
+	}
+}
+
+func SaveAssignment(assignment *model.Assignment) error {
+	if backend == nil {
+		return fmt.Errorf("Database has not been opened.")
+	}
+
+	err := assignment.Validate()
+	if err != nil {
+		return fmt.Errorf("Assignment '%s' is not valid: '%w'.", assignment.GetID(), err)
+	}
+
+	return backend.SaveAssignment(assignment)
 }

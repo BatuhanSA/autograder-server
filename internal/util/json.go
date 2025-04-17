@@ -1,6 +1,7 @@
 package util
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -131,11 +132,19 @@ func ToJSONFileIndentCustom(data any, path string, prefix string, indent string)
 
 // Take a best shot at getting what the key would be for this the field in a JSON object.
 func JSONFieldName(field reflect.StructField) string {
+	return JSONFieldNameFull(field, true)
+}
+
+func JSONFieldNameFull(field reflect.StructField, fallback bool) string {
 	name := field.Name
 
 	tag := field.Tag.Get("json")
 	if tag == "" {
-		return name
+		if fallback {
+			return name
+		} else {
+			return ""
+		}
 	}
 
 	parts := strings.Split(tag, ",")
@@ -147,8 +156,8 @@ func JSONFieldName(field reflect.StructField) string {
 			return ""
 		}
 
-		// This special option is allowed.
-		if part == "omitempty" {
+		// These special options are allowed.
+		if part == "omitempty" || part == "omitzero" {
 			continue
 		}
 
@@ -175,4 +184,89 @@ func unmarshal(data any, prefix string, indent string) (string, error) {
 	}
 
 	return string(bytes), nil
+}
+
+// Marshal an enum using a map of possible values in a way that can be used for MarshalJSON().
+func MarshalEnum[T comparable](value T, mapping map[T]string) ([]byte, error) {
+	buffer := bytes.NewBufferString(`"`)
+	buffer.WriteString(mapping[value])
+	buffer.WriteString(`"`)
+	return buffer.Bytes(), nil
+}
+
+// Unmarshal an enum using a map of possible values in a way that can be used for UnmarshalJSON().
+func UnmarshalEnum[T comparable](data []byte, mapping map[string]T, lowerCase bool) (*T, error) {
+	var temp string
+
+	err := json.Unmarshal(data, &temp)
+	if err != nil {
+		return nil, err
+	}
+
+	if lowerCase {
+		temp = strings.ToLower(temp)
+	}
+
+	value, ok := mapping[temp]
+	if !ok {
+		return nil, fmt.Errorf("Found invalid value '%s' for enum %T.", temp, value)
+	}
+
+	return &value, nil
+}
+
+// Change the type of an object by serializing it to JSON and then deserializing as the new type.
+func JSONTransformTypes[T any](rawValue any, defaultValue T) (T, error) {
+	jsonString, err := ToJSON(rawValue)
+	if err != nil {
+		return defaultValue, err
+	}
+
+	err = JSONFromString(jsonString, &defaultValue)
+	return defaultValue, err
+}
+
+func MustJSONTransformTypes[T any](rawValue any, defaultValue T) T {
+	value, err := JSONTransformTypes(rawValue, defaultValue)
+	if err != nil {
+		log.Fatal("Failed to transform type via JSON serialization.", err)
+	}
+
+	return value
+}
+
+// Format a JSON object string.
+func MustFormatJSONObject(text string) string {
+	var object map[string]any
+	MustJSONFromString(text, &object)
+	return MustToJSON(object)
+}
+
+func MustFormatJSONObjectIndent(text string) string {
+	var object map[string]any
+	MustJSONFromString(text, &object)
+	return MustToJSONIndent(object)
+}
+
+func MustToJSONMap(data any) map[string]any {
+	dataJSONMap, err := ToJSONMap(data)
+	if err != nil {
+		log.Fatal("Failed to convert data to a JSON map.", err)
+	}
+
+	return dataJSONMap
+}
+
+func ToJSONMap(data any) (map[string]any, error) {
+	dataJSON, err := ToJSON(data)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to convert data to JSON: '%v'.", err)
+	}
+
+	dataJSONMap, err := JSONMapFromString(dataJSON)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to convert JSON string to JSON map: '%v'.", err)
+	}
+
+	return dataJSONMap, nil
 }

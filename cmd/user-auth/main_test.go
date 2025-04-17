@@ -5,25 +5,21 @@ import (
 
 	"github.com/edulinq/autograder/internal/cmd"
 	"github.com/edulinq/autograder/internal/db"
-	"github.com/edulinq/autograder/internal/exit"
+	"github.com/edulinq/autograder/internal/util"
 )
-
-func TestMain(suite *testing.M) {
-	// Run inside a func so defers will run before exit.Exit().
-	code := func() int {
-		db.PrepForTestingMain()
-		defer db.CleanupTestingMain()
-
-		return suite.Run()
-	}()
-
-	exit.Exit(code)
-}
 
 // This test ensures a CMD can start its own server.
 // Since this is the only test that ensures a CMD can start its own server,
 // it must remain or be replaced with an equivalent test if removed.
-func TestUserAuthBase(test *testing.T) {
+func TestCMDStartsOwnServer(test *testing.T) {
+	db.PrepForTestingMain()
+	defer db.CleanupTestingMain()
+
+	// Ensure that the server we will start does not cleanup our work dir (which is a temp dir).
+	util.SetShouldRemoveTempDirs(false)
+	defer util.RemoveRecordedTempDirs()
+	defer util.SetShouldRemoveTempDirs(true)
+
 	commonTestCase := cmd.CommonCMDTestCase{
 		ExpectedStdout: expected_auth_output,
 	}

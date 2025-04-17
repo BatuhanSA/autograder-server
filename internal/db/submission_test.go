@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/edulinq/autograder/internal/model"
+	"github.com/edulinq/autograder/internal/timestamp"
 	"github.com/edulinq/autograder/internal/util"
 )
 
@@ -166,6 +168,124 @@ func (this *DBTests) DBTestGetSubmissionContentsStdoutStderr(test *testing.T) {
 
 	if expectedStderr != actualStderr {
 		test.Fatalf("Stderr does not match. Expected: '%s', Actual: '%s'.", expectedStderr, actualStderr)
+	}
+}
+
+func (this *DBTests) DBTestGetSubmissionHistoryBase(test *testing.T) {
+	assignment := MustGetTestAssignment()
+
+	results, err := GetSubmissionHistory(assignment, "course-student@test.edulinq.org")
+	if err != nil {
+		test.Fatalf("Failed to get submission history: '%v'.", err)
+	}
+
+	expected := []*model.SubmissionHistoryItem{
+		&model.SubmissionHistoryItem{
+			ID:               "course101::hw0::course-student@test.edulinq.org::1697406256",
+			ShortID:          "1697406256",
+			CourseID:         "course101",
+			AssignmentID:     "hw0",
+			User:             "course-student@test.edulinq.org",
+			Message:          "",
+			MaxPoints:        2,
+			Score:            0,
+			GradingStartTime: timestamp.FromMSecs(1697406256000),
+		},
+		&model.SubmissionHistoryItem{
+			ID:               "course101::hw0::course-student@test.edulinq.org::1697406265",
+			ShortID:          "1697406265",
+			CourseID:         "course101",
+			AssignmentID:     "hw0",
+			User:             "course-student@test.edulinq.org",
+			Message:          "",
+			MaxPoints:        2,
+			Score:            1,
+			GradingStartTime: timestamp.FromMSecs(1697406266000),
+		},
+		&model.SubmissionHistoryItem{
+			ID:               "course101::hw0::course-student@test.edulinq.org::1697406272",
+			ShortID:          "1697406272",
+			CourseID:         "course101",
+			AssignmentID:     "hw0",
+			User:             "course-student@test.edulinq.org",
+			Message:          "",
+			MaxPoints:        2,
+			Score:            2,
+			GradingStartTime: timestamp.FromMSecs(1697406273000),
+		},
+	}
+
+	if !reflect.DeepEqual(expected, results) {
+		test.Fatalf("Unexpected results. Expected: '%s', Actual: '%s'.", util.MustToJSONIndent(expected), util.MustToJSONIndent(results))
+	}
+}
+
+func (this *DBTests) DBTestGetNextSubmissionIDBase(test *testing.T) {
+	previousSubmissionID := ""
+
+	assignment := MustGetTestAssignment()
+	email := "course-student@test.edulinq.org"
+
+	for _ = range 10 {
+		currentSubmissionID, err := GetNextSubmissionID(assignment, email)
+		if err != nil {
+			test.Fatalf("Unable to get next submission ID: '%v'.", err)
+		}
+
+		if previousSubmissionID >= currentSubmissionID {
+			test.Fatalf("Next submission ID is not the largest for the user. Previous: '%s', next: '%s'.",
+				previousSubmissionID, currentSubmissionID)
+		}
+
+		submission := model.GradingResult{
+			Info: &model.GradingInfo{
+				ID:           currentSubmissionID,
+				ShortID:      currentSubmissionID,
+				CourseID:     assignment.GetCourse().GetID(),
+				AssignmentID: assignment.GetID(),
+				User:         email,
+			},
+		}
+
+		err = SaveSubmission(assignment, &submission)
+		if err != nil {
+			test.Fatalf("Failed to save submission: '%v'.", err)
+		}
+
+		previousSubmissionID = currentSubmissionID
+	}
+}
+
+func (this *DBTests) DBTestGetPreviousSubmissionIDBase(test *testing.T) {
+	testCases := []struct {
+		targetSubmission string
+		expected         string
+	}{
+		{"ZZZ", ""},
+
+		{"1697406256", ""},
+		{"1697406265", "course101::hw0::course-student@test.edulinq.org::1697406256"},
+		{"1697406272", "course101::hw0::course-student@test.edulinq.org::1697406265"},
+
+		{"course101::hw0::course-student@test.edulinq.org::1697406256", ""},
+		{"course101::hw0::course-student@test.edulinq.org::1697406265", "course101::hw0::course-student@test.edulinq.org::1697406256"},
+		{"course101::hw0::course-student@test.edulinq.org::1697406272", "course101::hw0::course-student@test.edulinq.org::1697406265"},
+	}
+
+	assignment := MustGetTestAssignment()
+	email := "course-student@test.edulinq.org"
+
+	for i, testCase := range testCases {
+		previousID, err := GetPreviousSubmissionID(assignment, email, testCase.targetSubmission)
+		if err != nil {
+			test.Errorf("Case %d: Failed to get previous submission ID: '%v'.", i, err)
+			continue
+		}
+
+		if testCase.expected != previousID {
+			test.Errorf("Case %d: Previous ID not as expected. Expected: '%s', Actual: '%s'.", i, testCase.expected, previousID)
+			continue
+		}
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/edulinq/autograder/internal/exit"
 	"github.com/edulinq/autograder/internal/log"
+	"github.com/edulinq/autograder/internal/timestamp"
 )
 
 type Route interface {
@@ -28,6 +29,7 @@ type APIRoute struct {
 	BaseRoute
 	RequestType  reflect.Type
 	ResponseType reflect.Type
+	Description  string
 }
 
 func (this *BaseRoute) GetMethod() string {
@@ -50,7 +52,7 @@ func NewBaseRoute(method string, basePath string, handler RouteHandler) *BaseRou
 	return &BaseRoute{
 		Method:   method,
 		BasePath: basePath,
-		Regex:    regexp.MustCompile("^" + MakeFullAPIPath(basePath) + "$"),
+		Regex:    regexp.MustCompile("^" + basePath + "$"),
 		Handler:  handler,
 	}
 }
@@ -60,16 +62,13 @@ func NewRedirect(method string, basePath string, target string) *BaseRoute {
 		return handleRedirect(target, response, request)
 	}
 
-	return &BaseRoute{
-		Method:   method,
-		BasePath: basePath,
-		Regex:    regexp.MustCompile("^" + MakeFullAPIPath(basePath) + "$"),
-		Handler:  redirectFunc,
-	}
+	return NewBaseRoute(method, basePath, redirectFunc)
 }
 
 func MustNewAPIRoute(basePath string, apiHandler any) *APIRoute {
 	handler := func(response http.ResponseWriter, request *http.Request) (err error) {
+		startTime := timestamp.Now()
+
 		// Recover from any panic.
 		defer func() {
 			value := recover()
@@ -79,10 +78,10 @@ func MustNewAPIRoute(basePath string, apiHandler any) *APIRoute {
 
 			log.Error("Recovered from a panic when handling an API endpoint.",
 				log.NewAttr("value", value), log.NewAttr("endpoint", request.URL.Path))
-			apiErr := NewBareInternalError("-001", request.URL.Path, "Recovered from a panic when handling an API endpoint.").
+			apiErr := NewInternalError("-001", request.URL.Path, "Recovered from a panic when handling an API endpoint.").
 				Add("value", value)
 
-			err = sendAPIResponse(nil, response, nil, apiErr, false)
+			err = sendAPIResponse(nil, response, nil, apiErr, false, startTime)
 		}()
 
 		err = handleAPIEndpoint(response, request, apiHandler)

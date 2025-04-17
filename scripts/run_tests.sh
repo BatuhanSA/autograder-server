@@ -15,8 +15,13 @@ function main() {
 
     local error_count=0
 
+    local extra_args=''
+    if [[ $AUTOGRADER_TEST_RERUN_FLAKY == 'true' ]] ; then
+        extra_args='--rerun-fails=3'
+    fi
+
     echo "Running tests."
-    go test -v -count=1 ./...
+    go run gotest.tools/gotestsum --format-hide-empty-pkg ${extra_args} --packages='./...'
     if [[ ${?} -ne 0 ]] ; then
         ((error_count += 1))
     fi

@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/edulinq/autograder/internal/common"
 	"github.com/edulinq/autograder/internal/db"
+	"github.com/edulinq/autograder/internal/log"
 	"github.com/edulinq/autograder/internal/model"
 	"github.com/edulinq/autograder/internal/timestamp"
 	"github.com/edulinq/autograder/internal/util"
@@ -27,7 +29,9 @@ type APIRequest struct {
 	// These are not provided in JSON, they are filled in during validation.
 	RequestID string              `json:"-"`
 	Endpoint  string              `json:"-"`
+	Sender    string              `json:"-"`
 	Timestamp timestamp.Timestamp `json:"-"`
+	Context   context.Context     `json:"-"`
 }
 
 // Context for a request that has a user (pretty much the lowest level of request).
@@ -36,7 +40,7 @@ type APIRequestUserContext struct {
 
 	UserEmail     string `json:"user-email"`
 	UserPass      string `json:"user-pass"`
-	RootUserNonce string `json:"root-user-nonce"`
+	RootUserNonce string `json:"root-user-nonce,omitempty"`
 
 	ServerUser *model.ServerUser `json:"-"`
 }
@@ -57,13 +61,20 @@ type APIRequestAssignmentContext struct {
 
 	AssignmentID string `json:"assignment-id"`
 
-	Assignment *model.Assignment
+	Assignment *model.Assignment `json:"-"`
 }
 
-func (this *APIRequest) Validate(request any, endpoint string) *APIError {
+func (this *APIRequest) Validate(httpRequest *http.Request, request any, endpoint string) *APIError {
 	this.RequestID = util.UUID()
 	this.Endpoint = endpoint
 	this.Timestamp = timestamp.Now()
+
+	if httpRequest == nil {
+		this.Context = context.Background()
+	} else {
+		this.Context = httpRequest.Context()
+		this.Sender = httpRequest.RemoteAddr
+	}
 
 	return nil
 }
@@ -73,8 +84,8 @@ func (this *APIRequest) Validate(request any, endpoint string) *APIError {
 // Additionally, all context fields will be populated.
 // This means that this request will be authenticated here.
 // The full request (object that this is embedded in) is also sent.
-func (this *APIRequestUserContext) Validate(request any, endpoint string) *APIError {
-	apiErr := this.APIRequest.Validate(request, endpoint)
+func (this *APIRequestUserContext) Validate(httpRequest *http.Request, request any, endpoint string) *APIError {
+	apiErr := this.APIRequest.Validate(httpRequest, request, endpoint)
 	if apiErr != nil {
 		return apiErr
 	}
@@ -83,27 +94,27 @@ func (this *APIRequestUserContext) Validate(request any, endpoint string) *APIEr
 		// Check for a valid nonce and skip auth if it exists.
 		_, rootUserExists := RootUserNonces.LoadAndDelete(this.RootUserNonce)
 		if !rootUserExists {
-			return NewAuthBadRequestError("-048", this, "Incorrect root user nonce.")
+			return NewAuthError("-048", this, "Incorrect root user nonce.")
 		}
 
 		rootUser, err := db.GetServerUser(model.RootUserEmail)
 		if err != nil {
-			return NewUserContextInternalError("-049", this, "Failed to get the root user.")
+			return NewInternalError("-049", this, "Failed to get the root user.")
 		}
 
 		if rootUser == nil {
-			return NewUserContextInternalError("-050", this, "Root user not found.")
+			return NewInternalError("-050", this, "Root user not found.")
 		}
 
 		this.UserEmail = rootUser.Email
 		this.ServerUser = rootUser
 	} else {
 		if this.UserEmail == "" {
-			return NewBadRequestError("-016", &this.APIRequest, "No user email specified.")
+			return NewBadRequestError("-016", this, "No user email specified.")
 		}
 
 		if this.UserPass == "" {
-			return NewBadRequestError("-017", &this.APIRequest, "No user password specified.")
+			return NewBadRequestError("-017", this, "No user password specified.")
 		}
 
 		this.ServerUser, apiErr = this.Auth()
@@ -118,7 +129,7 @@ func (this *APIRequestUserContext) Validate(request any, endpoint string) *APIEr
 	}
 
 	if this.ServerUser.Role < minRole {
-		return NewBadServerPermissionsError("-041", this, minRole, "Base API Request")
+		return NewPermissionsError("-041", this, minRole, this.ServerUser.Role, "Base API Request")
 	}
 
 	return nil
@@ -126,24 +137,32 @@ func (this *APIRequestUserContext) Validate(request any, endpoint string) *APIEr
 
 // See APIRequestUserContext.Validate().
 // The server user will be converted into a course user to be stored within this request.
-func (this *APIRequestCourseUserContext) Validate(request any, endpoint string) *APIError {
-	apiErr := this.APIRequestUserContext.Validate(request, endpoint)
+func (this *APIRequestCourseUserContext) Validate(httpRequest *http.Request, request any, endpoint string) *APIError {
+	apiErr := this.APIRequestUserContext.Validate(httpRequest, request, endpoint)
 	if apiErr != nil {
 		return apiErr
 	}
 
 	if this.CourseID == "" {
-		return NewBadRequestError("-015", &this.APIRequest, "No course ID specified.")
+		return NewBadRequestError("-015", this, "No course ID specified.")
 	}
 
-	var err error
+	id, err := common.ValidateID(this.CourseID)
+	if err != nil {
+		return NewBadRequestError("-052", this,
+			fmt.Sprintf("Could not find course (course ID ('%s') is invalid).", this.CourseID)).
+			Course(this.CourseID).Err(err)
+	}
+
+	this.CourseID = id
+
 	this.Course, err = db.GetCourse(this.CourseID)
 	if err != nil {
 		return NewInternalError("-032", this, "Unable to get course").Err(err)
 	}
 
 	if this.Course == nil {
-		return NewBadRequestError("-018", &this.APIRequest, fmt.Sprintf("Could not find course: '%s'.", this.CourseID)).
+		return NewBadRequestError("-018", this, fmt.Sprintf("Could not find course: '%s'.", this.CourseID)).
 			Course(this.CourseID)
 	}
 
@@ -153,7 +172,7 @@ func (this *APIRequestCourseUserContext) Validate(request any, endpoint string) 
 	}
 
 	if this.User == nil {
-		return NewBadRequestError("-040", &this.APIRequest, fmt.Sprintf("User '%s' is not enolled in course '%s'.", this.UserEmail, this.CourseID))
+		return NewBadRequestError("-040", this, fmt.Sprintf("User '%s' is not enolled in course '%s'.", this.UserEmail, this.CourseID))
 	}
 
 	minRole, foundRole := getMaxCourseRole(request)
@@ -162,38 +181,101 @@ func (this *APIRequestCourseUserContext) Validate(request any, endpoint string) 
 	}
 
 	if this.User.Role < minRole {
-		return NewBadCoursePermissionsError("-020", this, minRole, "Base API Request")
+		return NewPermissionsError("-020", this, minRole, this.User.Role, "Base API Request")
 	}
 
 	return nil
 }
 
 // See APIRequestUserContext.Validate().
-func (this *APIRequestAssignmentContext) Validate(request any, endpoint string) *APIError {
-	apiErr := this.APIRequestCourseUserContext.Validate(request, endpoint)
+func (this *APIRequestAssignmentContext) Validate(httpRequest *http.Request, request any, endpoint string) *APIError {
+	apiErr := this.APIRequestCourseUserContext.Validate(httpRequest, request, endpoint)
 	if apiErr != nil {
 		return apiErr
 	}
 
 	if this.AssignmentID == "" {
-		return NewBadRequestError("-021", &this.APIRequest, "No assignment ID specified.")
+		return NewBadRequestError("-021", this, "No assignment ID specified.")
 	}
 
 	id, err := common.ValidateID(this.AssignmentID)
 	if err != nil {
-		return NewBadRequestError("-035", &this.APIRequest, fmt.Sprintf("Provided assignment ID is invalid: '%s'.", this.AssignmentID)).
-			Course(this.CourseID).Assignment(this.AssignmentID).Err(err)
+		return NewBadRequestError("-035", this,
+			fmt.Sprintf("Could not find assignment (assignment ID ('%s') is invalid).", this.AssignmentID)).
+			Err(err)
 	}
 
 	this.AssignmentID = id
 
 	this.Assignment = this.Course.GetAssignment(this.AssignmentID)
 	if this.Assignment == nil {
-		return NewBadRequestError("-022", &this.APIRequest, fmt.Sprintf("Could not find assignment: '%s'.", this.AssignmentID)).
-			Course(this.CourseID).Assignment(this.AssignmentID)
+		return NewBadRequestError("-022", this, fmt.Sprintf("Could not find assignment: '%s'.", this.AssignmentID))
 	}
 
 	return nil
+}
+
+// Convert an API request into loggable attributes.
+// Note that this cannot be done (easily) with LogValue()
+// since we would need to attach that method to each instead of an APIRequest.
+func getLogAttributesFromAPIRequest(apiRequest ValidAPIRequest) []any {
+	typedAPIRequest := reflect.ValueOf(apiRequest).Elem().FieldByName("APIRequest").Interface().(APIRequest)
+
+	generalData, err := util.ToJSONMap(apiRequest)
+	if err != nil {
+		log.Error(fmt.Sprintf("Failed to convert APIRequest to JSON: '%#v'.", apiRequest), err)
+
+		return []any{
+			log.NewAttr("id", typedAPIRequest.RequestID),
+			log.NewAttr("endpoint", typedAPIRequest.Endpoint),
+			log.NewAttr("sender", typedAPIRequest.Sender),
+			log.NewAttr("timestamp", typedAPIRequest.Timestamp),
+			log.NewAttr("conversion-error", err.Error()),
+		}
+	}
+
+	// Clean up the data.
+
+	// Add fields that do not have JSON equivalents.
+	generalData["id"] = typedAPIRequest.RequestID
+	generalData["endpoint"] = typedAPIRequest.Endpoint
+	generalData["sender"] = typedAPIRequest.Sender
+
+	// Remove passwords.
+	delete(generalData, "user-pass")
+	delete(generalData, "new-pass")
+	cleanRawUsers(generalData)
+
+	// Swap over standard loggable keys.
+	// Note that these will be nil if they don't exist (and will be removed later).
+	generalData[log.KEY_USER] = generalData["user-email"]
+	delete(generalData, "user-email")
+	generalData[log.KEY_COURSE] = generalData["course-id"]
+	delete(generalData, "course-id")
+	generalData[log.KEY_ASSIGNMENT] = generalData["assignment-id"]
+	delete(generalData, "assignment-id")
+
+	for key, value := range generalData {
+		// Remove roles.
+		if minRoleRegex.MatchString(key) {
+			delete(generalData, key)
+			continue
+		}
+
+		// Remove nils.
+		if value == nil {
+			delete(generalData, key)
+			continue
+		}
+	}
+
+	// Convert to loggable attributes.
+	result := make([]any, 0, len(generalData))
+	for key, value := range generalData {
+		result = append(result, log.NewAttr(key, value))
+	}
+
+	return result
 }
 
 // Take in a pointer to an API request.
@@ -201,18 +283,18 @@ func (this *APIRequestAssignmentContext) Validate(request any, endpoint string) 
 func ValidateAPIRequest(request *http.Request, apiRequest any, endpoint string) *APIError {
 	reflectPointer := reflect.ValueOf(apiRequest)
 	if reflectPointer.Kind() != reflect.Pointer {
-		return NewBareInternalError("-023", endpoint, "ValidateAPIRequest() must be called with a pointer.").
+		return NewInternalError("-023", endpoint, "ValidateAPIRequest() must be called with a pointer.").
 			Add("kind", reflectPointer.Kind().String())
 	}
 
 	// Ensure the request has an request type embedded, and validate it.
-	foundRequestStruct, apiErr := validateRequestStruct(apiRequest, endpoint)
+	foundRequestStruct, apiErr := validateRequestStruct(request, apiRequest, endpoint)
 	if apiErr != nil {
 		return apiErr
 	}
 
 	if !foundRequestStruct {
-		return NewBareInternalError("-024", endpoint, "Request is not any kind of known API request.")
+		return NewInternalError("-024", endpoint, "Request is not any kind of known API request.")
 	}
 
 	// Check for any special field types that we know how to populate.
@@ -245,13 +327,13 @@ func CleanupAPIrequest(apiRequest ValidAPIRequest) error {
 	return nil
 }
 
-func validateRequestStruct(request any, endpoint string) (bool, *APIError) {
+func validateRequestStruct(httpRequest *http.Request, rawRequest any, endpoint string) (bool, *APIError) {
 	// Check all the fields (including embedded ones) for structures that we recognize as requests.
 	foundRequestStruct := false
 
-	reflectValue := reflect.ValueOf(request).Elem()
+	reflectValue := reflect.ValueOf(rawRequest).Elem()
 	if reflectValue.Kind() != reflect.Struct {
-		return false, NewBareInternalError("-031", endpoint, "Request's type must be a struct.").
+		return false, NewInternalError("-031", endpoint, "Request's type must be a struct.").
 			Add("kind", reflectValue.Kind().String())
 	}
 
@@ -263,7 +345,7 @@ func validateRequestStruct(request any, endpoint string) (bool, *APIError) {
 			apiRequest := fieldValue.Interface().(APIRequest)
 			foundRequestStruct = true
 
-			apiErr := apiRequest.Validate(request, endpoint)
+			apiErr := apiRequest.Validate(httpRequest, rawRequest, endpoint)
 			if apiErr != nil {
 				return false, apiErr
 			}
@@ -274,7 +356,7 @@ func validateRequestStruct(request any, endpoint string) (bool, *APIError) {
 			userRequest := fieldValue.Interface().(APIRequestUserContext)
 			foundRequestStruct = true
 
-			apiErr := userRequest.Validate(request, endpoint)
+			apiErr := userRequest.Validate(httpRequest, rawRequest, endpoint)
 			if apiErr != nil {
 				return false, apiErr
 			}
@@ -285,7 +367,7 @@ func validateRequestStruct(request any, endpoint string) (bool, *APIError) {
 			courseUserRequest := fieldValue.Interface().(APIRequestCourseUserContext)
 			foundRequestStruct = true
 
-			apiErr := courseUserRequest.Validate(request, endpoint)
+			apiErr := courseUserRequest.Validate(httpRequest, rawRequest, endpoint)
 			if apiErr != nil {
 				return false, apiErr
 			}
@@ -296,7 +378,7 @@ func validateRequestStruct(request any, endpoint string) (bool, *APIError) {
 			assignmentRequest := fieldValue.Interface().(APIRequestAssignmentContext)
 			foundRequestStruct = true
 
-			apiErr := assignmentRequest.Validate(request, endpoint)
+			apiErr := assignmentRequest.Validate(httpRequest, rawRequest, endpoint)
 			if apiErr != nil {
 				return false, apiErr
 			}
@@ -306,4 +388,109 @@ func validateRequestStruct(request any, endpoint string) (bool, *APIError) {
 	}
 
 	return foundRequestStruct, nil
+}
+
+// Reflexively get the request ID and timestamp from a request.
+func getRequestIDAndTimestamp(request ValidAPIRequest) (string, timestamp.Timestamp) {
+	id := ""
+	startTime := timestamp.Now()
+
+	if request == nil {
+		return id, startTime
+	}
+
+	reflectValue := reflect.ValueOf(request).Elem()
+
+	idValue := reflectValue.FieldByName("RequestID")
+	if idValue.IsValid() {
+		id = idValue.Interface().(string)
+	}
+
+	timestampValue := reflectValue.FieldByName("Timestamp")
+	if timestampValue.IsValid() {
+		startTime = timestampValue.Interface().(timestamp.Timestamp)
+	}
+
+	return id, startTime
+}
+
+// Get the endpoint, sender, userEmail, courseID, assignmentID, and locator
+// from a ValidAPIRequest and an APIError, both of which may be nil.
+func getRequestInfo(request ValidAPIRequest, apiError *APIError) (string, string, string, string, string, string) {
+	endpoint, sender, userEmail, courseID, assignmentID := getBasicAPIRequestInfo(request)
+	locator := ""
+
+	if apiError != nil {
+		endpoint = util.GetStringWithDefault(endpoint, apiError.Endpoint)
+		courseID = util.GetStringWithDefault(courseID, apiError.CourseID)
+		assignmentID = util.GetStringWithDefault(assignmentID, apiError.AssignmentID)
+		userEmail = util.GetStringWithDefault(userEmail, apiError.UserEmail)
+		locator = apiError.Locator
+	}
+
+	return endpoint, sender, userEmail, courseID, assignmentID, locator
+}
+
+// Reflexively get the endpoint, userEmail, courseID, and assignmentID from a ValidAPIRequest.
+func getBasicAPIRequestInfo(request ValidAPIRequest) (string, string, string, string, string) {
+	endpoint := ""
+	sender := ""
+	userEmail := ""
+	courseID := ""
+	assignmentID := ""
+
+	if request == nil {
+		return endpoint, sender, userEmail, courseID, assignmentID
+	}
+
+	reflectValue := reflect.ValueOf(request).Elem()
+
+	endpointValue := reflectValue.FieldByName("Endpoint")
+	if endpointValue.IsValid() {
+		endpoint = fmt.Sprintf("%s", endpointValue.Interface())
+	}
+
+	senderValue := reflectValue.FieldByName("Sender")
+	if senderValue.IsValid() {
+		sender = fmt.Sprintf("%s", senderValue.Interface())
+	}
+
+	userEmailValue := reflectValue.FieldByName("UserEmail")
+	if userEmailValue.IsValid() {
+		userEmail = fmt.Sprintf("%s", userEmailValue.Interface())
+	}
+
+	courseIDValue := reflectValue.FieldByName("CourseID")
+	if courseIDValue.IsValid() {
+		courseID = fmt.Sprintf("%s", courseIDValue.Interface())
+	}
+
+	assignmentIDValue := reflectValue.FieldByName("AssignmentID")
+	if assignmentIDValue.IsValid() {
+		assignmentID = fmt.Sprintf("%s", assignmentIDValue.Interface())
+	}
+
+	return endpoint, sender, userEmail, courseID, assignmentID
+}
+
+// Remove sensitive data from a generalized (from JSON) API request.
+func cleanRawUsers(generalData map[string]any) {
+	rawRawUsers, ok := generalData["raw-users"]
+	if !ok {
+		return
+	}
+
+	rawUsers, ok := rawRawUsers.([]any)
+	if !ok {
+		return
+	}
+
+	for _, rawRawUser := range rawUsers {
+		rawUser, ok := rawRawUser.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		delete(rawUser, "pass")
+	}
 }

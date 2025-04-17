@@ -3,12 +3,15 @@ package canvas
 import (
 	"fmt"
 
-	"github.com/edulinq/autograder/internal/common"
 	"github.com/edulinq/autograder/internal/lms/lmstypes"
 	"github.com/edulinq/autograder/internal/util"
 )
 
 func (this *CanvasBackend) FetchAssignment(assignmentID string) (*lmstypes.Assignment, error) {
+	if assignmentID == "" {
+		return nil, fmt.Errorf("Cannot fetch assignment, target assignment ID is empty.")
+	}
+
 	this.getAPILock()
 	defer this.releaseAPILock()
 
@@ -18,7 +21,7 @@ func (this *CanvasBackend) FetchAssignment(assignmentID string) (*lmstypes.Assig
 	url := this.BaseURL + apiEndpoint
 
 	headers := this.standardHeaders()
-	body, _, err := common.GetWithHeaders(url, headers)
+	body, _, err := util.GetWithHeaders(url, headers)
 
 	if err != nil {
 		return nil, fmt.Errorf("Failed to fetch assignment: '%w'.", err)
@@ -60,7 +63,7 @@ func (this *CanvasBackend) fetchAssignments(rewriteLinks bool) ([]*lmstypes.Assi
 			}
 		}
 
-		body, responseHeaders, err := common.GetWithHeaders(url, headers)
+		body, responseHeaders, err := util.GetWithHeaders(url, headers)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to fetch users: '%w'.", err)
 		}

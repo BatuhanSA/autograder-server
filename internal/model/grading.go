@@ -18,14 +18,17 @@ type GradingResult struct {
 
 type GradingInfo struct {
 	// Information set by the autograder.
-	ID           string  `json:"id"`
-	ShortID      string  `json:"short-id"`
-	CourseID     string  `json:"course-id"`
-	AssignmentID string  `json:"assignment-id"`
-	User         string  `json:"user"`
-	Message      string  `json:"message"`
-	MaxPoints    float64 `json:"max_points"`
-	Score        float64 `json:"score"`
+	ID             string               `json:"id"`
+	ShortID        string               `json:"short-id"`
+	CourseID       string               `json:"course-id"`
+	AssignmentID   string               `json:"assignment-id"`
+	User           string               `json:"user"`
+	ProxyUser      string               `json:"proxy-user,omitempty"`
+	Message        string               `json:"message"`
+	MaxPoints      float64              `json:"max_points"`
+	Score          float64              `json:"score"`
+	ProxyStartTime *timestamp.Timestamp `json:"proxy_start_time,omitempty"`
+	ProxyEndTime   *timestamp.Timestamp `json:"proxy_end_time,omitempty"`
 
 	// Information generally filled out by the grader.
 	Name             string              `json:"name"`
@@ -43,6 +46,8 @@ type GradedQuestion struct {
 	Name             string              `json:"name"`
 	MaxPoints        float64             `json:"max_points"`
 	Score            float64             `json:"score"`
+	HardFail         bool                `json:"hard_fail"`
+	Skipped          bool                `json:"skipped"`
 	Message          string              `json:"message"`
 	GradingStartTime timestamp.Timestamp `json:"grading_start_time"`
 	GradingEndTime   timestamp.Timestamp `json:"grading_end_time"`
@@ -156,7 +161,7 @@ func (this *GradedQuestion) Equals(other *GradedQuestion, checkMessages bool) bo
 		return false
 	}
 
-	if (this.Name != other.Name) || (this.MaxPoints != other.MaxPoints) || (this.Score != other.Score) {
+	if (this.Name != other.Name) || (this.MaxPoints != other.MaxPoints) || (this.Score != other.Score) || (this.HardFail != other.HardFail) || (this.Skipped != other.Skipped) {
 		return false
 	}
 

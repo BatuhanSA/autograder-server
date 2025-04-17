@@ -13,6 +13,8 @@ import (
 	"github.com/edulinq/autograder/internal/api/static"
 	"github.com/edulinq/autograder/internal/config"
 	"github.com/edulinq/autograder/internal/log"
+	"github.com/edulinq/autograder/internal/stats"
+	"github.com/edulinq/autograder/internal/timestamp"
 	"github.com/edulinq/autograder/internal/util"
 )
 
@@ -43,7 +45,7 @@ func GetRouteServer(routes *[]Route) http.HandlerFunc {
 }
 
 func ServeRoutes(routes *[]Route, response http.ResponseWriter, request *http.Request) {
-	log.Debug("Incoming Request", log.NewAttr("method", request.Method), log.NewAttr("url", request.URL.Path))
+	log.Trace("Raw Request", log.NewAttr("method", request.Method), log.NewAttr("url", request.URL.Path))
 
 	if routes == nil {
 		http.NotFound(response, request)
@@ -93,23 +95,27 @@ func handleRedirect(target string, response http.ResponseWriter, request *http.R
 }
 
 func handleAPIEndpoint(response http.ResponseWriter, request *http.Request, apiHandler any) error {
+	startTime := timestamp.Now()
+
 	// Ensure the handler looks good.
 	validAPIHandler, _, _, apiErr := validateAPIHandler(request.URL.Path, apiHandler)
 	if apiErr != nil {
-		return sendAPIResponse(nil, response, nil, apiErr, false)
+		return sendAPIResponse(nil, response, nil, apiErr, false, startTime)
 	}
 
 	// Get the actual request.
 	apiRequest, apiErr := createAPIRequest(request, validAPIHandler)
 	if apiErr != nil {
-		return sendAPIResponse(nil, response, nil, apiErr, false)
+		return sendAPIResponse(nil, response, nil, apiErr, false, startTime)
 	}
 	defer CleanupAPIrequest(apiRequest)
+
+	log.Debug("Incoming API Request", getLogAttributesFromAPIRequest(apiRequest)...)
 
 	// Execute the handler.
 	apiResponse, apiErr := callHandler(apiHandler, apiRequest)
 
-	return sendAPIResponse(apiRequest, response, apiResponse, apiErr, false)
+	return sendAPIResponse(apiRequest, response, apiResponse, apiErr, false, startTime)
 }
 
 // Send out the result from an API call.
@@ -118,7 +124,7 @@ func handleAPIEndpoint(response http.ResponseWriter, request *http.Request, apiH
 // |hardFail| controls whether we should try to wrap an error and call this method again (so we don't infinite loop),
 // most callers should set it to false.
 func sendAPIResponse(apiRequest ValidAPIRequest, response http.ResponseWriter,
-	content any, apiErr *APIError, hardFail bool) error {
+	content any, apiErr *APIError, hardFail bool, startTime timestamp.Timestamp) error {
 	var apiResponse *APIResponse = nil
 
 	if apiErr != nil {
@@ -132,7 +138,7 @@ func sendAPIResponse(apiRequest ValidAPIRequest, response http.ResponseWriter,
 
 	payload, err := util.ToJSON(apiResponse)
 	if err != nil {
-		apiErr = NewBareInternalError("-002", "", "Could not serialize API response.").Err(err)
+		apiErr = NewInternalError("-002", "", "Could not serialize API response.").Err(err)
 		apiResponse = apiErr.ToResponse()
 
 		if hardFail {
@@ -141,9 +147,28 @@ func sendAPIResponse(apiRequest ValidAPIRequest, response http.ResponseWriter,
 
 			payload, _ = util.ToJSON(apiResponse)
 		} else {
-			return sendAPIResponse(apiRequest, response, nil, apiErr, true)
+			return sendAPIResponse(apiRequest, response, nil, apiErr, true, startTime)
 		}
 	}
+
+	endpoint, sender, userEmail, courseID, assignmentID, locator := getRequestInfo(apiRequest, apiErr)
+	metric := stats.Metric{
+		Timestamp: startTime,
+		Type:      stats.MetricTypeAPIRequest,
+		Value:     float64((apiResponse.EndTimestamp - startTime).ToMSecs()),
+		Attributes: map[stats.MetricAttribute]any{
+			stats.MetricAttributeEndpoint: endpoint,
+		},
+	}
+
+	// Add optional fields if non-empty.
+	metric.SetSender(sender)
+	metric.SetAssignmentID(assignmentID)
+	metric.SetCourseID(courseID)
+	metric.SetLocator(locator)
+	metric.SetUserEmail(userEmail)
+
+	stats.AsyncStoreMetric(&metric)
 
 	// When in testing mode, allow cross-origin requests.
 	if config.UNIT_TESTING_MODE.Get() {
@@ -176,7 +201,7 @@ func createAPIRequest(request *http.Request, apiHandler ValidAPIHandler) (ValidA
 	if strings.Contains(strings.Join(request.Header["Content-Type"], " "), "multipart/form-data") {
 		err := request.ParseMultipartForm(MAX_FORM_MEM_SIZE_BYTES)
 		if err != nil {
-			return nil, NewBareBadRequestError("-003", endpoint,
+			return nil, NewBadRequestError("-003", endpoint,
 				fmt.Sprintf("POST request is improperly formatted.")).
 				Err(err)
 		}
@@ -185,14 +210,14 @@ func createAPIRequest(request *http.Request, apiHandler ValidAPIHandler) (ValidA
 	// Get the text from the POST.
 	textContent := request.PostFormValue(API_REQUEST_CONTENT_KEY)
 	if textContent == "" {
-		return nil, NewBareBadRequestError("-004", endpoint,
+		return nil, NewBadRequestError("-004", endpoint,
 			fmt.Sprintf("JSON payload for POST form key '%s' is empty.", API_REQUEST_CONTENT_KEY))
 	}
 
 	// Unmarshal the JSON.
 	err := util.JSONFromString(textContent, apiRequest)
 	if err != nil {
-		return nil, NewBareBadRequestError("-005", endpoint,
+		return nil, NewBadRequestError("-005", endpoint,
 			fmt.Sprintf("JSON payload for POST form key '%s' is not valid JSON.", API_REQUEST_CONTENT_KEY)).
 			Err(err)
 	}
@@ -234,39 +259,39 @@ func validateAPIHandler(endpoint string, apiHandler any) (ValidAPIHandler, refle
 	reflectType := reflect.TypeOf(apiHandler)
 
 	if reflectValue.Kind() != reflect.Func {
-		return nil, nil, nil, NewBareInternalError("-006", endpoint, "API handler is not a function.").
+		return nil, nil, nil, NewInternalError("-006", endpoint, "API handler is not a function.").
 			Add("kind", reflectValue.Kind().String())
 	}
 
 	funcInfo := getFuncInfo(apiHandler)
 
 	if reflectType.NumIn() != 1 {
-		return nil, nil, nil, NewBareInternalError("-007", endpoint, "API handler does not have exactly 1 argument.").
+		return nil, nil, nil, NewInternalError("-007", endpoint, "API handler does not have exactly 1 argument.").
 			Add("num-in", reflectType.NumIn()).
 			Add("function-info", funcInfo)
 	}
 	argumentType := reflectType.In(0)
 
 	if argumentType.Kind() != reflect.Pointer {
-		return nil, nil, nil, NewBareInternalError("-008", endpoint, "API handler's argument is not a pointer.").
+		return nil, nil, nil, NewInternalError("-008", endpoint, "API handler's argument is not a pointer.").
 			Add("kind", argumentType.Kind().String()).
 			Add("function-info", funcInfo)
 	}
 
 	if reflectType.NumOut() != 2 {
-		return nil, nil, nil, NewBareInternalError("-009", endpoint, "API handler does not return exactly 2 arguments.").
+		return nil, nil, nil, NewInternalError("-009", endpoint, "API handler does not return exactly 2 arguments.").
 			Add("num-out", reflectType.NumOut()).
 			Add("function-info", funcInfo)
 	}
 
 	if reflectType.Out(0).Kind() != reflect.Pointer {
-		return nil, nil, nil, NewBareInternalError("-010", endpoint, "API handler's first return value is not a pointer.").
+		return nil, nil, nil, NewInternalError("-010", endpoint, "API handler's first return value is not a pointer.").
 			Add("kind", reflectType.Out(0).Kind().String()).
 			Add("function-info", funcInfo)
 	}
 
 	if reflectType.Out(1) != reflect.TypeOf((*APIError)(nil)) {
-		return nil, nil, nil, NewBareInternalError("-011", endpoint, "API handler's second return value is a *APIError.").
+		return nil, nil, nil, NewInternalError("-011", endpoint, "API handler's second return value is not an *APIError.").
 			Add("type", reflectType.Out(1).String()).
 			Add("function-info", funcInfo)
 	}

@@ -6,9 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"reflect"
 
@@ -62,6 +60,7 @@ type TargetServerUserSelfOrAdmin struct {
 
 // Same as TargetServerUserSelfOrAdmin, but in the context of a course user and a grader context user.
 // Therefore, the context user only has to be a grader in the context course (or the target user themself).
+// When targeting yourself, the user can be a server admin (and will be escalated to course owner for the request).
 // The existence of this type in a struct also indicates that the request is at least a APIRequestCourseUserContext.
 type TargetCourseUserSelfOrGrader struct {
 	TargetCourseUser
@@ -79,50 +78,67 @@ type NonEmptyString string
 func checkRequestSpecialFields(request *http.Request, apiRequest any, endpoint string) *APIError {
 	reflectValue := reflect.ValueOf(apiRequest).Elem()
 
-	for i := 0; i < reflectValue.NumField(); i++ {
-		fieldValue := reflectValue.Field(i)
+	var apiErr *APIError = nil
+	var postFiles *POSTFiles = nil
 
-		if fieldValue.Type() == reflect.TypeOf((*CourseUsers)(nil)).Elem() {
-			apiErr := checkRequestCourseUsers(endpoint, apiRequest, i)
-			if apiErr != nil {
-				return apiErr
-			}
-		} else if fieldValue.Type() == reflect.TypeOf((*TargetServerUser)(nil)).Elem() {
-			apiErr := checkRequestTargetServerUser(endpoint, apiRequest, i)
-			if apiErr != nil {
-				return apiErr
-			}
-		} else if fieldValue.Type() == reflect.TypeOf((*TargetCourseUser)(nil)).Elem() {
-			apiErr := checkRequestTargetCourseUser(endpoint, apiRequest, i)
-			if apiErr != nil {
-				return apiErr
-			}
-		} else if fieldValue.Type() == reflect.TypeOf((*TargetServerUserSelfOrAdmin)(nil)).Elem() {
-			apiErr := checkRequestTargetServerUserSelfOrAdmin(endpoint, apiRequest, i)
-			if apiErr != nil {
-				return apiErr
-			}
-		} else if fieldValue.Type() == reflect.TypeOf((*TargetCourseUserSelfOrGrader)(nil)).Elem() {
-			apiErr := checkRequestTargetCourseUserSelfOrGrader(endpoint, apiRequest, i)
-			if apiErr != nil {
-				return apiErr
-			}
-		} else if fieldValue.Type() == reflect.TypeOf((*TargetCourseUserSelfOrAdmin)(nil)).Elem() {
-			apiErr := checkRequestTargetCourseUserSelfOrAdmin(endpoint, apiRequest, i)
-			if apiErr != nil {
-				return apiErr
-			}
-		} else if fieldValue.Type() == reflect.TypeOf((*POSTFiles)(nil)).Elem() {
-			apiErr := checkRequestPostFiles(request, endpoint, apiRequest, i)
-			if apiErr != nil {
-				return apiErr
-			}
-		} else if fieldValue.Type() == reflect.TypeOf((*NonEmptyString)(nil)).Elem() {
-			apiErr := checkRequestNonEmptyString(endpoint, apiRequest, i)
-			if apiErr != nil {
-				return apiErr
+	// Use a func to better handle cleanup on error.
+	innerFunc := func() *APIError {
+		for i := 0; i < reflectValue.NumField(); i++ {
+			fieldValue := reflectValue.Field(i)
+
+			if fieldValue.Type() == reflect.TypeOf((*CourseUsers)(nil)).Elem() {
+				apiErr = checkRequestCourseUsers(endpoint, apiRequest, i)
+				if apiErr != nil {
+					return apiErr
+				}
+			} else if fieldValue.Type() == reflect.TypeOf((*TargetServerUser)(nil)).Elem() {
+				apiErr = checkRequestTargetServerUser(endpoint, apiRequest, i)
+				if apiErr != nil {
+					return apiErr
+				}
+			} else if fieldValue.Type() == reflect.TypeOf((*TargetCourseUser)(nil)).Elem() {
+				apiErr = checkRequestTargetCourseUser(endpoint, apiRequest, i)
+				if apiErr != nil {
+					return apiErr
+				}
+			} else if fieldValue.Type() == reflect.TypeOf((*TargetServerUserSelfOrAdmin)(nil)).Elem() {
+				apiErr = checkRequestTargetServerUserSelfOrAdmin(endpoint, apiRequest, i)
+				if apiErr != nil {
+					return apiErr
+				}
+			} else if fieldValue.Type() == reflect.TypeOf((*TargetCourseUserSelfOrGrader)(nil)).Elem() {
+				apiErr = checkRequestTargetCourseUserSelfOrGrader(endpoint, apiRequest, i)
+				if apiErr != nil {
+					return apiErr
+				}
+			} else if fieldValue.Type() == reflect.TypeOf((*TargetCourseUserSelfOrAdmin)(nil)).Elem() {
+				apiErr = checkRequestTargetCourseUserSelfOrAdmin(endpoint, apiRequest, i)
+				if apiErr != nil {
+					return apiErr
+				}
+			} else if fieldValue.Type() == reflect.TypeOf((*POSTFiles)(nil)).Elem() {
+				postFiles, apiErr = checkRequestPostFiles(request, endpoint, apiRequest, i)
+				if apiErr != nil {
+					return apiErr
+				}
+			} else if fieldValue.Type() == reflect.TypeOf((*NonEmptyString)(nil)).Elem() {
+				apiErr = checkRequestNonEmptyString(endpoint, apiRequest, i)
+				if apiErr != nil {
+					return apiErr
+				}
 			}
 		}
+
+		return nil
+	}
+
+	err := innerFunc()
+	if err != nil {
+		if postFiles != nil {
+			util.RemoveDirent(postFiles.TempDir)
+		}
+
+		return err
 	}
 
 	return nil
@@ -153,14 +169,14 @@ func baseCheckRequestTargetServerUser(endpoint string, apiRequest any, fieldInde
 
 	userContextValue := reflectValue.FieldByName("APIRequestUserContext")
 	if !userContextValue.IsValid() || userContextValue.IsZero() {
-		return nil, NewBareInternalError("-042", endpoint, "A request with type requiring a server user must embed APIRequestUserContext").
+		return nil, NewInternalError("-042", endpoint, "A request with type requiring a server user must embed APIRequestUserContext").
 			Add("request", apiRequest).
 			Add("struct-name", structName).Add("field-name", fieldType.Name).Add("field-type", fieldName)
 	}
 	userContext := userContextValue.Interface().(APIRequestUserContext)
 
 	if !fieldType.IsExported() {
-		return nil, NewUserContextInternalError("-043", &userContext, "Field must be exported.").
+		return nil, NewInternalError("-043", &userContext, "Field must be exported.").
 			Add("struct-name", structName).Add("field-name", fieldType.Name).Add("field-type", fieldName)
 	}
 
@@ -182,14 +198,14 @@ func checkRequestTargetServerUser(endpoint string, apiRequest any, fieldIndex in
 	jsonName := util.JSONFieldName(fieldType)
 
 	if field.Email == "" {
-		return NewBadRequestError("-044", &userContext.APIRequest,
+		return NewBadRequestError("-044", userContext,
 			fmt.Sprintf("Field '%s' requires a non-empty string, empty or null provided.", jsonName)).
 			Add("struct-name", structName).Add("field-name", fieldType.Name).Add("json-name", jsonName)
 	}
 
 	user, err := db.GetServerUser(field.Email)
 	if err != nil {
-		return NewUserContextInternalError("-045", userContext, "Failed to fetch user from DB.").
+		return NewInternalError("-045", userContext, "Failed to fetch user from DB.").
 			Add("email", field.Email).Err(err)
 	}
 
@@ -225,12 +241,12 @@ func checkRequestTargetServerUserSelfOrRole(endpoint string, apiRequest any, fie
 
 	// Operations not on self require higher permissions.
 	if (field.Email != userContext.ServerUser.Email) && (userContext.ServerUser.Role < minRole) {
-		return NewBadServerPermissionsError("-046", userContext, minRole, "Non-Self Target User")
+		return NewPermissionsError("-046", userContext, minRole, userContext.ServerUser.Role, "Non-Self Target User")
 	}
 
 	user, err := db.GetServerUser(field.Email)
 	if err != nil {
-		return NewUserContextInternalError("-047", userContext, "Failed to fetch user from DB.").
+		return NewInternalError("-047", userContext, "Failed to fetch user from DB.").
 			Add("email", field.Email).Err(err)
 	}
 
@@ -260,7 +276,7 @@ func checkRequestTargetCourseUser(endpoint string, apiRequest any, fieldIndex in
 	jsonName := util.JSONFieldName(fieldType)
 
 	if field.Email == "" {
-		return NewBadRequestError("-034", &courseContext.APIRequest,
+		return NewBadRequestError("-034", courseContext,
 			fmt.Sprintf("Field '%s' requires a non-empty string, empty or null provided.", jsonName)).
 			Add("struct-name", structName).Add("field-name", fieldType.Name).Add("json-name", jsonName)
 	}
@@ -298,11 +314,15 @@ func checkRequestTargetCourseUserSelfOrRole(endpoint string, apiRequest any, fie
 	field := reflectField.Interface().(TargetCourseUser)
 	if field.Email == "" {
 		field.Email = courseContext.User.Email
+
+		// If the user (which is the target of this request) is a server admin,
+		// insert them into the course users (they have already been escalated).
+		users[courseContext.User.Email] = courseContext.User
 	}
 
 	// Operations not on self require higher permissions.
 	if (field.Email != courseContext.User.Email) && (courseContext.User.Role < minRole) {
-		return NewBadCoursePermissionsError("-033", courseContext, minRole, "Non-Self Target User")
+		return NewPermissionsError("-033", courseContext, minRole, courseContext.User.Role, "Non-Self Target User")
 	}
 
 	user := users[field.Email]
@@ -318,7 +338,11 @@ func checkRequestTargetCourseUserSelfOrRole(endpoint string, apiRequest any, fie
 	return nil
 }
 
-func checkRequestPostFiles(request *http.Request, endpoint string, apiRequest any, fieldIndex int) *APIError {
+// Get files from the POST request.
+// If successful, a pointer to the post files will be returned AND embedded in the request.
+// The returned reference is for cleanup if there is an error further up the stack,
+// if there is no error it does not need to be explicitly cleaned up (as that will happen after the request handler is done).
+func checkRequestPostFiles(request *http.Request, endpoint string, apiRequest any, fieldIndex int) (*POSTFiles, *APIError) {
 	reflectValue := reflect.ValueOf(apiRequest).Elem()
 
 	structName := reflectValue.Type().Name()
@@ -327,7 +351,7 @@ func checkRequestPostFiles(request *http.Request, endpoint string, apiRequest an
 	fieldType := reflectValue.Type().Field(fieldIndex)
 
 	if !fieldType.IsExported() {
-		return NewBareInternalError("-028", endpoint, "A POSTFiles field must be exported.").
+		return nil, NewInternalError("-028", endpoint, "A POSTFiles field must be exported.").
 			Add("struct-name", structName).Add("field-name", fieldType.Name)
 	}
 
@@ -336,24 +360,24 @@ func checkRequestPostFiles(request *http.Request, endpoint string, apiRequest an
 	if err != nil {
 		var fileSizeExceededError *fileSizeExceededError
 		if errors.As(err, &fileSizeExceededError) {
-			return NewBareBadRequestError("-036", endpoint, err.Error()).Err(err).
+			return nil, NewBadRequestError("-036", endpoint, err.Error()).Err(err).
 				Add("struct-name", structName).Add("field-name", fieldType.Name).
 				Add("filename", fileSizeExceededError.Filename).Add("file-size", fileSizeExceededError.FileSizeKB).
 				Add("max-file-size-kb", fileSizeExceededError.MaxFileSizeKB)
 		} else {
-			return NewBareInternalError("-029", endpoint, "Failed to store files from POST.").Err(err).
+			return nil, NewInternalError("-029", endpoint, "Failed to store files from POST.").Err(err).
 				Add("struct-name", structName).Add("field-name", fieldType.Name)
 		}
 	}
 
 	if postFiles == nil {
-		return NewBareBadRequestError("-030", endpoint, "Endpoint requires files to be provided in POST body, no files found.").
+		return nil, NewBadRequestError("-030", endpoint, "Endpoint requires files to be provided in POST body, no files found.").
 			Add("struct-name", structName).Add("field-name", fieldType.Name)
 	}
 
 	fieldValue.Set(reflect.ValueOf(*postFiles))
 
-	return nil
+	return postFiles, nil
 }
 
 func checkRequestNonEmptyString(endpoint string, apiRequest any, fieldIndex int) *APIError {
@@ -367,7 +391,7 @@ func checkRequestNonEmptyString(endpoint string, apiRequest any, fieldIndex int)
 
 	value := fieldValue.Interface().(NonEmptyString)
 	if value == "" {
-		return NewBareBadRequestError("-038", endpoint,
+		return NewBadRequestError("-038", endpoint,
 			fmt.Sprintf("Field '%s' requires a non-empty string, empty or null provided.", jsonName)).
 			Add("struct-name", structName).Add("field-name", fieldType.Name).Add("json-name", jsonName)
 	}
@@ -379,7 +403,7 @@ func cleanPostFiles(apiRequest ValidAPIRequest, fieldIndex int) *APIError {
 	reflectValue := reflect.ValueOf(apiRequest).Elem()
 	fieldValue := reflectValue.Field(fieldIndex)
 	postFiles := fieldValue.Interface().(POSTFiles)
-	os.RemoveAll(postFiles.TempDir)
+	util.RemoveDirent(postFiles.TempDir)
 
 	return nil
 }
@@ -416,7 +440,7 @@ func storeRequestFiles(request *http.Request) (*POSTFiles, error) {
 
 	err = innerFunc()
 	if err != nil {
-		os.RemoveAll(tempDir)
+		util.RemoveDirent(tempDir)
 		return nil, err
 	}
 
@@ -446,15 +470,9 @@ func storeRequestFile(request *http.Request, outDir string, filename string) err
 
 	outPath := filepath.Join(outDir, filename)
 
-	outFile, err := os.Create(outPath)
+	err = util.WriteFileFromReader(outPath, inFile)
 	if err != nil {
-		return fmt.Errorf("Failed to create output file '%s': '%w'.", outPath, err)
-	}
-	defer outFile.Close()
-
-	_, err = io.Copy(outFile, inFile)
-	if err != nil {
-		return fmt.Errorf("Failed to copy contents of request file '%s': '%w'.", filename, err)
+		return fmt.Errorf("Failed to store copy of request file '%s': '%w'.", outPath, err)
 	}
 
 	return nil
@@ -473,7 +491,7 @@ func baseCheckRequestUsersField(endpoint string, apiRequest any, fieldIndex int)
 	courseContextValue := reflectValue.FieldByName("APIRequestCourseUserContext")
 	if !courseContextValue.IsValid() || courseContextValue.IsZero() {
 		return nil, nil,
-			NewBareInternalError("-025", endpoint, "A request with type requiring course users must embed APIRequestCourseUserContext").
+			NewInternalError("-025", endpoint, "A request with type requiring course users must embed APIRequestCourseUserContext").
 				Add("request", apiRequest).
 				Add("struct-name", structName).Add("field-name", fieldType.Name).Add("field-type", fieldName)
 	}
